@@ -1,0 +1,17 @@
+name: biometric-env
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - matplotlib
+  - scikit-learn
+  - opencv
+  - jupyterlab
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pip:
+      - tensorboard
