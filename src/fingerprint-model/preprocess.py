@@ -12,7 +12,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if not (
     os.path.exists(
         os.path.join(
-            SCRIPT_DIR, "../../datasets/ruizgara/socofing/versions/2/SOCOFing/Real"
+            SCRIPT_DIR, "../../data/SOCOFing/Real"
         )
     )
 ):
@@ -23,10 +23,10 @@ if not (
     print("Path to dataset files:", path)
 
 CurrPath = os.path.join(
-    SCRIPT_DIR, "../../datasets/ruizgara/socofing/versions/2/SOCOFing/Real"
+    SCRIPT_DIR, "../../data/SOCOFing/Real"
 )
 DATA_DIR = os.path.normpath(CurrPath)
-IMG_SIZE = 128
+IMG_SIZE = 224
 
 # 1. Get file paths
 image_paths = [
@@ -36,25 +36,39 @@ image_paths = [
 
 # 2. Preprocessing Function
 def preprocess_fingerprint(img_path):
-    # Read image in grayscale
+ # Read image in grayscale
     img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
 
-    # Resize
+    # Resize to 224x224 for ResNet-18
     img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
 
-    # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    # Apply CLAHE
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     img = clahe.apply(img)
 
     # Normalize to [0,1]
     img = img.astype(np.float32) / 255.0
 
+    # Replicate grayscale to 3 channels
+    img = np.stack([img, img, img], axis=2)
+
+    # Normalize using ImageNet mean and std
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+    img = (img - mean) / std
+
+    # Change HWC to CHW format (channels first)
+    img = np.transpose(img, (2, 0, 1))
+
     return img
 
 # 3. Visualize Original vs Preprocessed
-def show_sample(idx=0):
+def show_sample(idx=3):
     orig = cv2.imread(image_paths[idx], cv2.IMREAD_GRAYSCALE)
     processed = preprocess_fingerprint(image_paths[idx])
+
+    # Convert CHW to HWC for visualization
+    processed_vis = np.transpose(processed, (1, 2, 0))
 
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
@@ -63,9 +77,8 @@ def show_sample(idx=0):
 
     plt.subplot(1, 2, 2)
     plt.title("Preprocessed")
-    plt.imshow(processed, cmap="gray")
-
+    plt.imshow(processed_vis)
     plt.show()
 
 # Show a sample
-show_sample(0)
+show_sample()
