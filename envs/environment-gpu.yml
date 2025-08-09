@@ -14,6 +14,7 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
+  - kagglehub
   - pytorch-cuda=12.1
   - pip:
       - tensorboard

@@ -1,18 +1,38 @@
 import os
 import cv2
-import numpy as np
+import kagglehub
 import matplotlib.pyplot as plt
-from torchvision import transforms
+import numpy as np
 from PIL import Image
+from torchvision import transforms
 
 # Set the path to your fingerprint images
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CurrPath = os.path.join(SCRIPT_DIR, "../../data/SOCOFing/Real")
+
+if not (
+    os.path.exists(
+        os.path.join(
+            SCRIPT_DIR, "../../datasets/ruizgara/socofing/versions/2/SOCOFing/Real"
+        )
+    )
+):
+    # Set custom cache directory for kagglehub
+    os.environ["KAGGLEHUB_CACHE"] = os.path.join(SCRIPT_DIR, "../../")
+    # Download the Dataset
+    path = kagglehub.dataset_download("ruizgara/socofing/versions/2")
+    print("Path to dataset files:", path)
+
+CurrPath = os.path.join(
+    SCRIPT_DIR, "../../datasets/ruizgara/socofing/versions/2/SOCOFing/Real"
+)
 DATA_DIR = os.path.normpath(CurrPath)
 IMG_SIZE = 128
 
 # 1. Get file paths
-image_paths = [os.path.join(DATA_DIR, f) for f in os.listdir(DATA_DIR) if f.endswith(".BMP")]
+image_paths = [
+    os.path.join(DATA_DIR, f) for f in os.listdir(DATA_DIR) if f.endswith(".BMP")
+]
+
 
 # 2. Preprocessing Function
 def preprocess_fingerprint(img_path):
@@ -39,12 +59,12 @@ def show_sample(idx=0):
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
     plt.title("Original")
-    plt.imshow(orig, cmap='gray')
-    
+    plt.imshow(orig, cmap="gray")
+
     plt.subplot(1, 2, 2)
     plt.title("Preprocessed")
-    plt.imshow(processed, cmap='gray')
-    
+    plt.imshow(processed, cmap="gray")
+
     plt.show()
 
 # Show a sample
