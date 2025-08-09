@@ -13,5 +13,6 @@ dependencies:
   - pytorch
   - torchvision
   - torchaudio
+  - kagglehub
   - pip:
       - tensorboard
