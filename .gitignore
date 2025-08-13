@@ -1,2 +1,4 @@
 /data
 /labels
+__pycache__/
+*.pyc
