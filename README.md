@@ -28,5 +28,5 @@ Dataset - https://www.kaggle.com/datasets/ninadmehendale/multimodal-iris-fingerp
 run thuis command to generate coresponding csv files for fingerprint and iris images.
 
 ```bash
-python src/dataset.py --root ./data/IRIS_and_FINGERPRINT_DATASET --outdir ./labels
+python src/gen-labels.py --root ./data/IRIS_and_FINGERPRINT_DATASET --outdir ./labels
 ```
