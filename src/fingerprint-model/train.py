@@ -8,6 +8,7 @@ import numpy as np
 from pathlib import Path
 from torchvision.models import ResNet18_Weights
 from tqdm import tqdm
+import os
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EMBEDDING_DIM = 256
@@ -133,8 +134,12 @@ def main():
 
 
         print(f"Epoch {epoch}/{EPOCHS} - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f}")
+    
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)  # Create the folder if it doesn't exist
 
-    torch.save(model.state_dict(), "fingerprint_embedding_model.pth")
+    torch.save(model.state_dict(), os.path.join(output_dir, "fingerprint_embedding_model.pth"))
+    torch.save(model.state_dict(), "output/fingerprint_embedding_model.pth")
 
 if __name__ == "__main__":
     main()

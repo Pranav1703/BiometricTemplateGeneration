@@ -2,3 +2,4 @@
 /labels
 __pycache__/
 *.pyc
+/output
