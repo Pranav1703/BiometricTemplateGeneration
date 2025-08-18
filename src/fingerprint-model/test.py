@@ -6,7 +6,7 @@ from train import EmbeddingNet  # ✅ Import your trained model architecture
 # ====== CONFIG ======
 MODEL_PATH = "output/fingerprint_embedding_model.pth"
 IMG1_PATH = "data/IRIS_and_FINGERPRINT_DATASET/1/Fingerprint/1__M_Left_middle_finger.BMP"
-IMG2_PATH = "data/IRIS_and_FINGERPRINT_DATASET/1/Fingerprint/1__M_Right_index_finger.BMP"
+IMG2_PATH = "data/IRIS_and_FINGERPRINT_DATASET/1/Fingerprint/1__M_Left_middle_finger.BMP"
 
 # ====== 1. Load the model ======
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,7 +34,7 @@ similarity = F.cosine_similarity(emb1, emb2).item()
 print(f"\n🔍 Cosine Similarity: {similarity:.4f}")
 
 # ====== 6. Simple decision ======
-THRESHOLD = 0.8
+THRESHOLD = 0.99
 if similarity >= THRESHOLD:
     print("✅ Likely same finger")
 else:
