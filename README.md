@@ -30,7 +30,8 @@ run thuis command to generate coresponding csv files for fingerprint and iris im
 ```bash
 python data/gen-labels.py --root ./IRIS_and_FINGERPRINT_DATASET --outdir ./labels
 ```
-
+## Project Structure
+```
 BiometricTemplateGeneration/
 ├── data/                          # Dataset directory
 │   ├── labels/                    # Generated labels for training/validation
@@ -101,3 +102,4 @@ BiometricTemplateGeneration/
 ├── README.md                      # Project documentation
 ├── requirements.txt               # Python dependencies
 └── .gitignore                     # Git ignore rules
+```
