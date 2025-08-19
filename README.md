@@ -25,7 +25,7 @@ A multimodal biometric recognition system that uses both fingerprint and iris im
 ### Dataset prep
 Dataset - https://www.kaggle.com/datasets/ninadmehendale/multimodal-iris-fingerprint-biometric-data
 
-run thuis command to generate coresponding csv files for fingerprint and iris images.
+run this command to generate coresponding csv files for fingerprint and iris images.
 
 ```bash
 python src/gen-labels.py --root ./data/IRIS_and_FINGERPRINT_DATASET --outdir ./labels
