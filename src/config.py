@@ -37,7 +37,7 @@ FINGERPRINT_EX_2_0 = os.path.join(DATASET_DIR, "2", "Fingerprint", "1__M_Left_mi
 FINGERPRINT_EX_2_1 = os.path.join(DATASET_DIR, "2", "Fingerprint", "1__M_Right_middle_finger.BMP")
 IRIS_EX_1_0 = os.path.join(DATASET_DIR, "1", "left", "aeval1.bmp")
 IRIS_EX_1_1 = os.path.join(DATASET_DIR, "1", "right", "aevar1.bmp")
-IRIS_EX_2_0 = os.path.join(DATASET_DIR, "2", "left", "aeval1.bmp")
+IRIS_EX_2_0 = os.path.join(DATASET_DIR, "30", "left", "roslil4.bmp")
 IRIS_EX_2_1 = os.path.join(DATASET_DIR, "2", "right", "aevar1.bmp")
 
 # Make sure folders exist

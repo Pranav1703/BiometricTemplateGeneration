@@ -3,14 +3,16 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import models
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard.writer import SummaryWriter
 from src.utils.Dataset_Loader import IrisDataset  # <-- use CSV-based IrisDataset
 import numpy as np
 from torchvision.models import ResNet18_Weights
 from tqdm import tqdm
 import os
 from pathlib import Path
-from src.config import IRIS_TRAIN_CSV, IRIS_VAL_CSV
-
+from src.config import IRIS_TRAIN_CSV, IRIS_VAL_CSV, SAVED_MODELS_DIR, TENSORBOARD_DIR
+from src.utils.logger import get_logger
+from datetime import datetime
 
 # ==================
 # Config
@@ -139,6 +141,9 @@ def validate(model, dataloader, criterion):
 # Main
 # ==================
 def main():
+    
+    # Initializing Loger
+    logger = get_logger("train")
     train_csv = IRIS_TRAIN_CSV
     val_csv = IRIS_VAL_CSV
 
@@ -157,17 +162,36 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
     criterion = nn.TripletMarginLoss(margin=MARGIN)
 
+    # Create unique run directory
+    run_name = datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_dir = os.path.join(TENSORBOARD_DIR, run_name)
+
+    # Initialize the Tensorboard Writier
+    writer = SummaryWriter(log_dir=log_dir)
+
+    logger.info("Tensorboard is initialized run this command in another termenal to see the live graph tensorboard --logdir artifacts\\plots\\tensorboard")
+
     # Training loop
     for epoch in range(1, EPOCHS + 1):
         train_loss = train(model, train_loader, optimizer, criterion)
         val_loss = validate(model, val_loader, criterion)
 
-        print(f"Epoch {epoch}/{EPOCHS} - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f}")
+        # Log scalar values
+        writer.add_scalar("Loss/Train", train_loss, epoch)
+        writer.add_scalar("Loss/Val", val_loss, epoch)
 
+        logger.info(f"Epoch {epoch}/{EPOCHS} - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f}")
+
+    writer.close()
     # Save model
-    output_dir = "output"
-    os.makedirs(output_dir, exist_ok=True)
-    torch.save(model.state_dict(), os.path.join(output_dir, "iris_embedding_model.pth"))
+
+    try:
+        output_dir = SAVED_MODELS_DIR
+        os.makedirs(output_dir, exist_ok=True)
+        torch.save(model.state_dict(), os.path.join(output_dir, "iris_embedding_model.pth"))
+        logger.info("Model Saved successfully")
+    except:
+        logger.error("Model can't save")
 
 
 if __name__ == "__main__":
