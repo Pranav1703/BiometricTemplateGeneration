@@ -26,6 +26,7 @@ TENSORBOARD_DIR = os.path.abspath(os.path.join(PLOTS_DIR, "tensorboard"))
 MODEL_DIR = os.path.join(BASE_DIR, "models")
 SAVED_MODELS_DIR = os.path.join(ARTIFACTS, "models")
 FINGERPRINT_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "fingerprint_embedding_model.pth")
+IRIS_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "iris_embedding_model.pth")
 
 # utils paths
 UTILS_DIR = os.path.join(BASE_DIR, "utils")
