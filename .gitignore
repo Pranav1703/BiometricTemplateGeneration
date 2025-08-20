@@ -4,10 +4,4 @@ __pycache__/
 *.pyc
 /output
 /datasets
-.gitignore
-/artifacts/logs/*
-/artifacts/models/*
-/artifacts/plots/*
-!/artifacts/logs/.gitkeep
-!/artifacts/models/.gitkeep
-!/artifacts/models/.gitkeep
+artifacts/
