@@ -2,8 +2,8 @@ import csv
 import torch
 import torch.nn.functional as F
 from itertools import combinations
-from preprocess.fingerprint import preprocess_fingerprint
-from train import EmbeddingNet  # Import your trained architecture
+from src.preprocess.fingerprint import preprocess_fingerprint
+from .train import EmbeddingNet  # Import your trained architecture
 from pathlib import Path
 import numpy as np
 
