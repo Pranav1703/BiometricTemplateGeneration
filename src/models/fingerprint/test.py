@@ -2,13 +2,13 @@ import torch
 import torch.nn.functional as F
 from src.preprocess.fingerprint import preprocess_fingerprint
 from src.models.fingerprint.train import EmbeddingNet  # ✅ Import your trained model architecture
-from src.config import FINGERPRINT_EX_1_0,SAVED_MODELS_DIR
+from src.config import FINGERPRINT_EX_1_0,FINGERPRINT_EX_1_1,SAVED_MODELS_DIR
 import os
 
 # ====== CONFIG ======
 MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "fingerprint_embedding_model.pth")
 IMG1_PATH = FINGERPRINT_EX_1_0
-IMG2_PATH = FINGERPRINT_EX_1_0
+IMG2_PATH = FINGERPRINT_EX_1_1
 
 # ====== 1. Load the model ======
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

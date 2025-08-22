@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
-from preprocess.iris import preprocess_image   # ✅ Import iris preprocessing
-from train import EmbeddingNet  # ✅ Import your iris model architecture
+from src.preprocess.iris import preprocess_image   # ✅ Import iris preprocessing
+from src.models.Iris.train import EmbeddingNet  # ✅ Import your iris model architecture
 
 # ====== CONFIG ======
 MODEL_PATH = "output/iris_embedding_model.pth"

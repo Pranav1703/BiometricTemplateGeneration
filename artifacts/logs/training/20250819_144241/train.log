@@ -1,5 +1,0 @@
-2025-08-19 14:42:41,436 [INFO] train - Dataset is already Downloaded
-2025-08-19 14:42:41,436 [INFO] train - Labels is already Created
-2025-08-19 14:42:41,436 [INFO] train - Dataset is already Downloaded
-2025-08-19 14:42:41,436 [INFO] train - Labels is already Created
-2025-08-19 14:42:41,585 [INFO] train - Tensorboard is initialized run this command in another termenal to see the live graph tensorboard --logdir artifacts\plots\tensorboard
