@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from itertools import combinations
 from src.preprocess.fingerprint import preprocess_fingerprint
-from .train import EmbeddingNet  # Import your trained architecture
+from .train import FingerprintEmbeddingNet  # Import your trained architecture
 from pathlib import Path
 import numpy as np
 from src.config import FINGERPRINT_MODEL_PATH,FINGERPRINT_VAL_CSV
@@ -15,7 +15,7 @@ VAL_CSV = Path(FINGERPRINT_VAL_CSV)  # Adjust path if needed
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ====== Load model ======
-model = EmbeddingNet().to(device)
+model = FingerprintEmbeddingNet().to(device)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=device, weights_only=True))
 model.eval()
 

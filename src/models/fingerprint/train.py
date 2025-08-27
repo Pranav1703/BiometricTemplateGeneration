@@ -22,7 +22,7 @@ MARGIN = 1.0  # For triplet loss
 LEARNING_RATE = 1e-4
 
 # Modified ResNet-18 for embeddings
-class EmbeddingNet(nn.Module):
+class FingerprintEmbeddingNet(nn.Module):
     def __init__(self, embedding_dim=EMBEDDING_DIM):
         super().__init__()
         # Use new weights argument instead of deprecated pretrained
@@ -137,7 +137,7 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    model = EmbeddingNet().to(DEVICE)
+    model = FingerprintEmbeddingNet().to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
     criterion = nn.TripletMarginLoss(margin=MARGIN)
 

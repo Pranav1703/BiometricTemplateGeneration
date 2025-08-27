@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from itertools import combinations
 from src.preprocess.iris import preprocess_image   # <- your iris preprocessing
-from .train import EmbeddingNet           # Import trained iris architecture
+from .train import IrisEmbeddingNet           # Import trained iris architecture
 from pathlib import Path
 import numpy as np
 from src.config import IRIS_VAL_CSV,IRIS_MODEL_PATH
@@ -16,7 +16,7 @@ VAL_CSV = Path(IRIS_VAL_CSV)            # <- iris validation csv
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ====== Load model ======
-model = EmbeddingNet().to(device)
+model = IrisEmbeddingNet().to(device)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=device, weights_only=True))
 model.eval()
 

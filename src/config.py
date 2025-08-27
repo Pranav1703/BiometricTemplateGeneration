@@ -45,8 +45,6 @@ IRIS_EX_2_1 = os.path.join(DATASET_DIR, "2", "right", "aevar1.bmp")
 os.makedirs(TRAINING_LOG_DIR, exist_ok=True)
 os.makedirs(TENSORBOARD_DIR, exist_ok=True)
 os.makedirs(SAVED_MODELS_DIR, exist_ok=True)
-os.makedirs(FINGERPRINT_MODEL_PATH, exist_ok=True)
-os.makedirs(IRIS_MODEL_PATH, exist_ok=True)
 
 # Hyperparameters
 # BATCH_SIZE = 32

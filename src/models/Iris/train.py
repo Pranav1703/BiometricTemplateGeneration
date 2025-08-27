@@ -29,7 +29,7 @@ IMG_SIZE = 224
 # ==================
 # Model
 # ==================
-class EmbeddingNet(nn.Module):
+class IrisEmbeddingNet(nn.Module):
     def __init__(self, embedding_dim=EMBEDDING_DIM):
         super().__init__()
         weights = ResNet18_Weights.IMAGENET1K_V1
@@ -158,7 +158,7 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
     # Model, optimizer, loss
-    model = EmbeddingNet().to(DEVICE)
+    model = IrisEmbeddingNet().to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
     criterion = nn.TripletMarginLoss(margin=MARGIN)
 
