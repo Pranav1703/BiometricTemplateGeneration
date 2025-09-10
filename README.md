@@ -103,3 +103,5 @@ BiometricTemplateGeneration/
 ├── requirements.txt               # Python dependencies
 └── .gitignore                     # Git ignore rules
 ```
+
+cancelable techniques.
