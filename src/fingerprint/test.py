@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from src.preprocess.fingerprint import preprocess_fingerprint
+from models.fingerprint.preprocess_fingerprint import preprocess_fingerprint
 from src.models.fingerprint.train import FingerprintEmbeddingNet  # ✅ Import your trained model architecture
 from src.config import FINGERPRINT_EX_1_0,FINGERPRINT_EX_1_1,SAVED_MODELS_DIR
 import os

@@ -5,7 +5,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Data paths
 DATA_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "data"))
-DATASET_DIR = os.path.join(DATA_DIR, "IRIS and FINGERPRINT DATASET")
 LABELS_DIR = os.path.join(DATA_DIR, "labels")
 PROCESSED_DATA_DIR = os.path.join(DATA_DIR, "preprocess")
 
@@ -32,14 +31,7 @@ IRIS_MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "iris_embedding_model.pth")
 UTILS_DIR = os.path.join(BASE_DIR, "utils")
 
 # Example Images paths
-FINGERPRINT_EX_1_0 = os.path.join(DATASET_DIR, "1", "Fingerprint", "1__M_Left_middle_finger.BMP")
-FINGERPRINT_EX_1_1 = os.path.join(DATASET_DIR, "1", "Fingerprint", "1__M_Right_middle_finger.BMP")
-FINGERPRINT_EX_2_0 = os.path.join(DATASET_DIR, "2", "Fingerprint", "1__M_Left_middle_finger.BMP")
-FINGERPRINT_EX_2_1 = os.path.join(DATASET_DIR, "2", "Fingerprint", "1__M_Right_middle_finger.BMP")
-IRIS_EX_1_0 = os.path.join(DATASET_DIR, "1", "left", "aeval1.bmp")
-IRIS_EX_1_1 = os.path.join(DATASET_DIR, "1", "right", "aevar1.bmp")
-IRIS_EX_2_0 = os.path.join(DATASET_DIR, "30", "left", "roslil4.bmp")
-IRIS_EX_2_1 = os.path.join(DATASET_DIR, "2", "right", "aevar1.bmp")
+FINGERPRINT_EX_1_1 = "D:/code/Projects/biometric-template-gen/data/CASIA-dataset/000/R000_R0_0.bmp"
 
 # Make sure folders exist
 os.makedirs(TRAINING_LOG_DIR, exist_ok=True)

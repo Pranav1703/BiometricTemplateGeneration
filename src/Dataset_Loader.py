@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 import torch
 import os
 import shutil
-from src.preprocess.fingerprint import preprocess_fingerprint  # your preprocessing function
+from fingerprint.preprocess_fingerprint import preprocess_fingerprint  # your preprocessing function
 from .gen_labels import main as gen_labels
 from src.utils.logger import get_logger
 import kagglehub

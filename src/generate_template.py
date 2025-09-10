@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from src.preprocess.fingerprint import preprocess_fingerprint
+from models.fingerprint.preprocess_fingerprint import preprocess_fingerprint
 from src.preprocess.iris import preprocess_image
 from src.models.fingerprint.train import FingerprintEmbeddingNet
 from src.models.Iris.train import IrisEmbeddingNet

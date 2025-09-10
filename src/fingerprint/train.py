@@ -7,8 +7,8 @@ from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision.models import ResNet18_Weights
 from pathlib import Path
 from tqdm import tqdm
-from src.config import SAVED_MODELS_DIR, TENSORBOARD_DIR
-from src.utils.Dataset_Loader import FingerprintDataset  # Your Dataset class
+from src.config import FINGERPRINT_TRAIN_CSV, FINGERPRINT_VAL_CSV, SAVED_MODELS_DIR, TENSORBOARD_DIR
+from ..Dataset_Loader import FingerprintDataset  # Your Dataset class
 from src.utils.logger import get_logger
 from datetime import datetime
 import numpy as np
@@ -16,12 +16,7 @@ import os
 
 from pathlib import Path
 # Paths (remove src.config import)
-DATA_DIR = Path("data")
-LABELS_DIR = DATA_DIR / "labels"
-FINGERPRINT_TRAIN_CSV = LABELS_DIR / "fingerprint_train.csv"
-FINGERPRINT_VAL_CSV = LABELS_DIR / "fingerprint_val.csv"
-SAVED_MODELS_DIR = Path("artifacts/models")
-TENSORBOARD_DIR = Path("artifacts/plots/tensorboard")
+
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

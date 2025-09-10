@@ -2,21 +2,20 @@ import csv
 import torch
 import torch.nn.functional as F
 from itertools import combinations
-from src.preprocess.iris import preprocess_image   # <- your iris preprocessing
-from .train import IrisEmbeddingNet           # Import trained iris architecture
+from models.fingerprint.preprocess_fingerprint import preprocess_fingerprint
+from .train import FingerprintEmbeddingNet  # Import your trained architecture
 from pathlib import Path
 import numpy as np
-from src.config import IRIS_VAL_CSV,IRIS_MODEL_PATH
-
+from src.config import FINGERPRINT_MODEL_PATH,FINGERPRINT_VAL_CSV
 
 # ====== CONFIG ======
-MODEL_PATH = IRIS_MODEL_PATH   # <- iris model
-VAL_CSV = Path(IRIS_VAL_CSV)            # <- iris validation csv
+MODEL_PATH = FINGERPRINT_MODEL_PATH
+VAL_CSV = Path(FINGERPRINT_VAL_CSV)  # Adjust path if needed
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # ====== Load model ======
-model = IrisEmbeddingNet().to(device)
+model = FingerprintEmbeddingNet().to(device)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=device, weights_only=True))
 model.eval()
 
@@ -27,10 +26,11 @@ with open(VAL_CSV, newline='') as f:
     for row in reader:
         samples.append((row['filepath'], int(row['person_id'])))
 
-# ====== Cache embeddings ======
+# ====== Cache embeddings for speed ======
 embeddings_cache = {}
 for img_path, label in samples:
-    img_tensor = preprocess_image(img_path).unsqueeze(0).to(device)
+    img_array = preprocess_fingerprint(img_path, train=False)
+    img_tensor = torch.tensor(img_array).unsqueeze(0).to(device)
     with torch.no_grad():
         emb = model(img_tensor).cpu()
     embeddings_cache[img_path] = (emb, label)
@@ -50,11 +50,11 @@ best_thresh = 0
 sims = np.array([p[0] for p in pairs])
 labels = np.array([p[1] for p in pairs])
 
-for thresh in np.linspace(0, 1, 101):  # 0.00 → 1.00 in steps of 0.01
+for thresh in np.linspace(0, 1, 101):  # 0.00 to 1.00 in steps of 0.01
     preds = (sims >= thresh).astype(int)
     acc = (preds == labels).mean()
     if acc > best_acc:
         best_acc = acc
         best_thresh = thresh
 
-print(f"✅ Best Threshold (Iris): {best_thresh:.2f} | Accuracy: {best_acc*100:.2f}%")
+print(f"✅ Best Threshold: {best_thresh:.2f} | Accuracy: {best_acc*100:.2f}%")
