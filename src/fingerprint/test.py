@@ -1,46 +1,26 @@
 import torch
 import torch.nn.functional as F
-from models.fingerprint.preprocess_fingerprint import preprocess_fingerprint
-from src.models.fingerprint.train import FingerprintEmbeddingNet  # ✅ Import your trained model architecture
-from src.config import FINGERPRINT_EX_1_0,FINGERPRINT_EX_1_1,SAVED_MODELS_DIR
-import os
 
-# ====== CONFIG ======
-MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "fingerprint_embedding_model.pth")
-IMG1_PATH = FINGERPRINT_EX_1_0
-IMG2_PATH = FINGERPRINT_EX_1_1
+# load saved embeddings
+data = torch.load("artifacts/embeddings/test_embeddings.pt")
+embeddings = data["embeddings"]
+labels = data["labels"]
 
-# ====== 1. Load the model ======
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Loaded embeddings: {embeddings.shape}, labels: {labels.shape}")
 
-model = FingerprintEmbeddingNet()  # create model
-model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-model.to(device)
-model.eval()
+# Example: cosine similarity between first two
+cos = F.cosine_similarity(embeddings[0].unsqueeze(0), embeddings[1].unsqueeze(0))
+print("Cosine similarity between sample 0 and 1:", cos.item())
 
-# ====== 2. Preprocess images ======
-img1_tensor = torch.tensor(preprocess_fingerprint(IMG1_PATH, train=False)).unsqueeze(0).to(device)
-img2_tensor = torch.tensor(preprocess_fingerprint(IMG2_PATH, train=False)).unsqueeze(0).to(device)
+# Example: compute same-ID vs different-ID mean cosine similarity
+same_id = []
+diff_id = []
+for i in range(100):  # sample a subset to keep it fast
+    for j in range(i+1, i+10):
+        if labels[i] == labels[j]:
+            same_id.append(F.cosine_similarity(embeddings[i].unsqueeze(0), embeddings[j].unsqueeze(0)).item())
+        else:
+            diff_id.append(F.cosine_similarity(embeddings[i].unsqueeze(0), embeddings[j].unsqueeze(0)).item())
 
-# ====== 3. Get embeddings ======
-with torch.no_grad():
-    emb1 = model(img1_tensor)
-    emb2 = model(img2_tensor)
-
-# ====== 4. Log embeddings ======
-print("\n Embedding for Fingerprint Image 1 Shape:", emb1.shape)
-print(" Embedding for Fingerprint Image 2 Shape:", emb2.shape)
-
-print("\n Embedding for Fingerprint Image 1:\n", emb1.cpu().numpy())
-print("\n Embedding for Fingerprint Image 2:\n", emb2.cpu().numpy())
-
-# ====== 5. Compute similarity ======
-similarity = F.cosine_similarity(emb1, emb2).item()
-print(f"\n🔍 Cosine Similarity: {similarity:.4f}")
-
-# ====== 6. Simple decision ======
-THRESHOLD = 0.99
-if similarity >= THRESHOLD:
-    print("✅ Likely same finger")
-else:
-    print("❌ Likely different fingers")
+print(f"Mean cosine similarity (same ID): {sum(same_id)/len(same_id):.3f}")
+print(f"Mean cosine similarity (different ID): {sum(diff_id)/len(diff_id):.3f}")

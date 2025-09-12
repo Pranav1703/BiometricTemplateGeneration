@@ -1,180 +1,162 @@
+import os
+from datetime import datetime
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import models
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision.models import ResNet18_Weights
-from pathlib import Path
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import math
+
 from src.config import FINGERPRINT_TRAIN_CSV, FINGERPRINT_VAL_CSV, SAVED_MODELS_DIR, TENSORBOARD_DIR
-from ..Dataset_Loader import FingerprintDataset  # Your Dataset class
+from src.Dataset_Loader import FingerprintDataset
 from src.utils.logger import get_logger
-from datetime import datetime
-import numpy as np
-import os
-
-from pathlib import Path
-# Paths (remove src.config import)
-
-
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EMBEDDING_DIM = 256
 BATCH_SIZE = 32
 EPOCHS = 20
-MARGIN = 1.0  # For triplet loss
 LEARNING_RATE = 1e-4
+NUM_CLASSES = 500  # <-- set to number of unique fingerprint IDs
 
-# Modified ResNet-18 for embeddings
+# --------------------------
+# Backbone: ResNet18 -> Embedding
+# --------------------------
 class FingerprintEmbeddingNet(nn.Module):
     def __init__(self, embedding_dim=EMBEDDING_DIM):
         super().__init__()
-        # Use new weights argument instead of deprecated pretrained
         weights = ResNet18_Weights.IMAGENET1K_V1
         self.model = models.resnet18(weights=weights)
         self.model.fc = nn.Linear(self.model.fc.in_features, embedding_dim)
-    
+
     def forward(self, x):
         x = self.model(x)
+        # Normalize to unit hypersphere
         return nn.functional.normalize(x, p=2, dim=1)
 
-# Triplet mining utility (basic batch all triplets)
-def get_triplets(embeddings, labels):
+# --------------------------
+# ArcFace / ArcMarginProduct head
+# --------------------------
+class ArcMarginProduct(nn.Module):
     """
-    Generate triplets for triplet loss: anchor, positive, negative
-    For simplicity, generate all valid triplets in batch.
+    Implements large margin arc distance:
+    cos(theta + m)
     """
-    triplets = []
-    labels = labels.cpu().numpy()
-    embeddings = embeddings.cpu().detach().numpy()
-    
-    for i in range(len(embeddings)):
-        anchor_label = labels[i]
-        anchor = embeddings[i]
-        
-        pos_indices = np.where(labels == anchor_label)[0]
-        neg_indices = np.where(labels != anchor_label)[0]
-        
-        # skip anchor itself for positive
-        pos_indices = pos_indices[pos_indices != i]
-        
-        for pos_idx in pos_indices:
-            for neg_idx in neg_indices:
-                triplets.append((i, pos_idx, neg_idx))
-    return triplets
+    def __init__(self, in_features, out_features, s=30.0, m=0.50, easy_margin=False):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.s = s
+        self.m = m
+        self.weight = nn.Parameter(torch.FloatTensor(out_features, in_features))
+        nn.init.xavier_uniform_(self.weight)
 
-def train(model, dataloader, optimizer, criterion):
-    model.train()
+        self.easy_margin = easy_margin
+        self.cos_m = math.cos(m)
+        self.sin_m = math.sin(m)
+        self.th = math.cos(math.pi - m)
+        self.mm = math.sin(math.pi - m) * m
+
+    def forward(self, input, label):
+        # input: (batch, embedding_dim)
+        # label: (batch)
+        cosine = nn.functional.linear(nn.functional.normalize(input),
+                                      nn.functional.normalize(self.weight))
+        sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
+        phi = cosine * self.cos_m - sine * self.sin_m  # cos(theta + m)
+
+        if self.easy_margin:
+            phi = torch.where(cosine > 0, phi, cosine)
+        else:
+            phi = torch.where(cosine > self.th, phi, cosine - self.mm)
+
+        one_hot = torch.zeros(cosine.size(), device=input.device)
+        one_hot.scatter_(1, label.view(-1, 1), 1.0)
+
+        # combine
+        output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
+        output *= self.s
+        return output  # logits
+# --------------------------
+
+def train_one_epoch(backbone, margin_head, dataloader, optimizer, criterion):
+    backbone.train()
+    margin_head.train()
     total_loss = 0
     loop = tqdm(dataloader, desc="Training", leave=False)
     for imgs, labels in loop:
-        imgs = imgs.to(DEVICE)
-        labels = labels.to(DEVICE)
+        imgs, labels = imgs.to(DEVICE), labels.to(DEVICE)
+        embeddings = backbone(imgs)
+        logits = margin_head(embeddings, labels)
+        loss = criterion(logits, labels)
 
-        embeddings = model(imgs)
-        triplets = get_triplets(embeddings, labels)
-        if not triplets:
-            continue
-
-        anchor_idx, pos_idx, neg_idx = zip(*triplets)
-        anchor = embeddings[list(anchor_idx)]
-        positive = embeddings[list(pos_idx)]
-        negative = embeddings[list(neg_idx)]
-
-        loss = criterion(anchor, positive, negative)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         total_loss += loss.item()
         loop.set_postfix(loss=loss.item())
-    avg_loss = total_loss / len(dataloader)
-    return avg_loss
+    return total_loss / len(dataloader)
 
-def validate(model, dataloader, criterion):
-    model.eval()
+@torch.no_grad()
+def validate(backbone, margin_head, dataloader, criterion):
+    backbone.eval()
+    margin_head.eval()
     total_loss = 0
     loop = tqdm(dataloader, desc="Validation", leave=False)
-    with torch.no_grad():
-        for imgs, labels in loop:
-            imgs = imgs.to(DEVICE)
-            labels = labels.to(DEVICE)
-
-            embeddings = model(imgs)
-            triplets = get_triplets(embeddings, labels)
-            if not triplets:
-                continue
-
-            anchor_idx, pos_idx, neg_idx = zip(*triplets)
-            anchor = embeddings[list(anchor_idx)]
-            positive = embeddings[list(pos_idx)]
-            negative = embeddings[list(neg_idx)]
-
-            loss = criterion(anchor, positive, negative)
-            total_loss += loss.item()
-            loop.set_postfix(loss=loss.item())
-    avg_loss = total_loss / len(dataloader)
-    return avg_loss
-
-
+    for imgs, labels in loop:
+        imgs, labels = imgs.to(DEVICE), labels.to(DEVICE)
+        embeddings = backbone(imgs)
+        logits = margin_head(embeddings, labels)
+        loss = criterion(logits, labels)
+        total_loss += loss.item()
+        loop.set_postfix(loss=loss.item())
+    return total_loss / len(dataloader)
 
 def main():
-    # Initializing Loger
     logger = get_logger("train")
 
-    # Example usage
-    # logger.debug(msg) → Detailed debug info
-    # logger.info(msg) → General info (e.g. loss values, progress)
-    # logger.warning(msg) → Something unexpected, but not breaking
-    # logger.error(msg) → Serious issue
-    # logger.critical(msg) → Program might crash
-
-    train_csv = FINGERPRINT_TRAIN_CSV
-    val_csv = FINGERPRINT_VAL_CSV
-
-    print(f"Train CSV path: {train_csv}")
-    print(f"Val CSV path: {val_csv}")
-
-    train_dataset = FingerprintDataset(str(train_csv))
-    val_dataset = FingerprintDataset(str(val_csv))
-
+    # datasets
+    train_dataset = FingerprintDataset(str(FINGERPRINT_TRAIN_CSV), train=True)
+    val_dataset = FingerprintDataset(str(FINGERPRINT_VAL_CSV), train=False)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    model = FingerprintEmbeddingNet().to(DEVICE)
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
-    criterion = nn.TripletMarginLoss(margin=MARGIN)
+    # number of classes from dataset
+    unique_ids = len(set(label for _, label in train_dataset.samples))
+    logger.info(f"Detected {unique_ids} unique fingerprint IDs.")
+    num_classes = unique_ids
 
-    # Create unique run directory
+    backbone = FingerprintEmbeddingNet().to(DEVICE)
+    margin_head = ArcMarginProduct(EMBEDDING_DIM, num_classes).to(DEVICE)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(list(backbone.parameters()) + list(margin_head.parameters()),
+                           lr=LEARNING_RATE, weight_decay=1e-4)
+
     run_name = datetime.now().strftime("%Y%m%d-%H%M%S")
     log_dir = os.path.join(TENSORBOARD_DIR, run_name)
-
-    # Initialize the Tensorboard Writier
     writer = SummaryWriter(log_dir=log_dir)
-
-    logger.info("Tensorboard is initialized run this command in another termenal to see the live graph tensorboard --logdir artifacts\\plots\\tensorboard")
+    logger.info(f"Tensorboard initialized. Run: tensorboard --logdir {TENSORBOARD_DIR}")
 
     for epoch in range(1, EPOCHS + 1):
-        train_loss = train(model, train_loader, optimizer, criterion)
-        val_loss = validate(model, val_loader, criterion)
-
-        # Log scalar values
+        train_loss = train_one_epoch(backbone, margin_head, train_loader, optimizer, criterion)
+        val_loss = validate(backbone, margin_head, val_loader, criterion)
         writer.add_scalar("Loss/Train", train_loss, epoch)
         writer.add_scalar("Loss/Val", val_loss, epoch)
-
         logger.info(f"Epoch {epoch}/{EPOCHS} - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f}")
 
     writer.close()
 
-    try:
-        output_dir = SAVED_MODELS_DIR
-        os.makedirs(output_dir, exist_ok=True)  # Create the folder if it doesn't exist
-        torch.save(model.state_dict(), os.path.join(output_dir, "fingerprint_embedding_model.pth"))
-        logger.info("Model Saved successfully")
-    except:
-        logger.error("Model can't save")
-
+    os.makedirs(SAVED_MODELS_DIR, exist_ok=True)
+    torch.save({
+        "backbone": backbone.state_dict(),
+        "margin_head": margin_head.state_dict()
+    }, os.path.join(SAVED_MODELS_DIR, "fingerprint_arcface_model.pth"))
+    logger.info("Model saved successfully.")
 
 if __name__ == "__main__":
     main()
