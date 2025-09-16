@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import models
-from torchvision.models import ResNet18_Weights
+from torchvision.models import ResNet50_Weights
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -17,20 +17,20 @@ from src.Dataset_Loader import FingerprintDataset
 from src.utils.logger import get_logger
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-EMBEDDING_DIM = 256
-BATCH_SIZE = 32
+EMBEDDING_DIM = 512
+BATCH_SIZE = 16
 EPOCHS = 20
 LEARNING_RATE = 1e-4
 NUM_CLASSES = 500  # <-- set to number of unique fingerprint IDs
 
 # --------------------------
-# Backbone: ResNet18 -> Embedding
+# Backbone: ResNet50 -> Embedding
 # --------------------------
 class FingerprintEmbeddingNet(nn.Module):
     def __init__(self, embedding_dim=EMBEDDING_DIM):
         super().__init__()
-        weights = ResNet18_Weights.IMAGENET1K_V1
-        self.model = models.resnet18(weights=weights)
+        weights = ResNet50_Weights.IMAGENET1K_V1
+        self.model = models.resnet50(weights=weights)
         self.model.fc = nn.Linear(self.model.fc.in_features, embedding_dim)
 
     def forward(self, x):
