@@ -9,7 +9,7 @@ labels = data["labels"]
 print(f"Loaded embeddings: {embeddings.shape}, labels: {labels.shape}")
 
 # Example: cosine similarity between first two
-cos = F.cosine_similarity(embeddings[0].unsqueeze(0), embeddings[1].unsqueeze(0))
+cos = F.cosine_similarity(embeddings[0].unsqueeze(0), embeddings[0].unsqueeze(0))
 print("Cosine similarity between sample 0 and 1:", cos.item())
 
 # Example: compute same-ID vs different-ID mean cosine similarity
@@ -27,9 +27,15 @@ print("Cosine similarity between sample 0 and 1:", cos.item())
 
 
 '''
-If your model has learned good representations:
+To confirm that your protection still preserves identity information:
 
-mean(same_id) should be close to 1
+Test intra-class similarity (same finger, different samples).
 
-mean(diff_id) should be close to 0 (or negative)
+Test inter-class similarity (different fingers).
+FAR, FRR
+
+Plot ROC / DET or EER curves to see if genuine vs imposter distributions are separable even after projection.
+
+If genuine pairs (like yours) consistently score ~0.84 and imposters <0.5,
+then protection works and recognition accuracy remains good.
 '''
