@@ -5,7 +5,7 @@ from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Assume get_embeddings and other initializations are the same
-from src.fingerprint.idv_inference import get_embeddings
+from src.fingerprint.randProjection_inference import get_embeddings
 from src.config import DATA_DIR
 
 # ---------------------------

@@ -1,43 +1,55 @@
-from typing import List
+import numpy as np
 
-def quantize_embedding(embedding: List[float], min_val: float = -1.0, max_val: float = 1.0) -> bytes:
-    """
-    Quantizes a list of floats into bytes (8 bits per dimension).
+def quantize_embedding(embedding, bits=8, min_val=None, max_val=None):
+    """Quantizes a list of floats into bytes."""
+    embedding = np.array(embedding, dtype=np.float32)
     
-    The mapping is linear from [min_val, max_val] to [0, 255].
-    Values outside [min_val, max_val] are clamped.
-
-    Args:
-        embedding (List[float]): The input embedding (usually 512-dim).
-        min_val (float): The minimum expected value in the embedding.
-        max_val (float): The maximum expected value in the embedding.
-
-    Returns:
-        bytes: The quantized embedding as a byte string.
-    """
-    scale = 255.0 / (max_val - min_val)
-    quantized_values = []
+    if min_val is None:
+        min_val = np.min(embedding)
+    if max_val is None:
+        max_val = np.max(embedding)
     
-    for val in embedding:
-        # Clamp value
-        val = max(min_val, min(val, max_val))
-        # Scale and round
-        int_val = int(round((val - min_val) * scale))
-        quantized_values.append(int_val)
-        
-    return bytes(quantized_values)
+    scale = (2 ** bits - 1) / (max_val - min_val + 1e-10)
+    quantized_values = np.clip(np.round((embedding - min_val) * scale), 0, 2 ** bits - 1)
+    
+    return quantized_values.astype(np.uint8).tobytes()
 
-def dequantize_embedding(quantized: bytes, min_val: float = -1.0, max_val: float = 1.0) -> List[float]:
-    """
-    Reconstructs a list of floats from a quantized byte string.
 
-    Args:
-        quantized (bytes): The quantized embedding.
-        min_val (float): The minimum value used during quantization.
-        max_val (float): The maximum value used during quantization.
+def dequantize_embedding(quantized, bits=8, min_val=None, max_val=None):
+    """Reconstructs a list of floats from quantized bytes."""
+    quantized_arr = np.frombuffer(quantized, dtype=np.uint8)
+    
+    if min_val is None:
+        min_val = 0
+    if max_val is None:
+        max_val = 1.0
+    
+    scale = (max_val - min_val) / (2 ** bits - 1)
+    reconstructed = (quantized_arr.astype(np.float32) * scale + min_val).tolist()
+    
+    return reconstructed
 
-    Returns:
-        List[float]: The reconstructed embedding.
-    """
-    scale = (max_val - min_val) / 255.0
-    return [byte * scale + min_val for byte in quantized]
+
+def robust_quantize(embedding, num_bits=12):
+    """Robust quantization for biometric embeddings."""
+    embedding = embedding.astype(np.float32)
+    
+    norm = np.linalg.norm(embedding)
+    if norm > 0:
+        embedding = embedding / norm
+    
+    scale = (2 ** num_bits - 1)
+    quantized = np.clip(np.round(embedding * scale + scale / 2), 0, 2 * scale)
+    quantized = (quantized / 2).astype(np.uint8)
+    
+    return quantized.tobytes()
+
+
+def robust_dequantize(quantized, num_bits=12):
+    """Robust dequantization for biometric embeddings."""
+    quantized_arr = np.frombuffer(quantized, dtype=np.uint8).astype(np.float32)
+    
+    scale = (2 ** num_bits - 1)
+    reconstructed = (quantized_arr - scale / 2) / scale
+    
+    return reconstructed
