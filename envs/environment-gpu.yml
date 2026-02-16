@@ -3,10 +3,11 @@ channels:
   - pytorch
   - nvidia
   - defaults
+  - conda-forge
 dependencies:
   - python=3.10
   - pip
-  - numpy
+  - numpy=1.26
   - matplotlib
   - scikit-learn
   - opencv
@@ -17,5 +18,7 @@ dependencies:
   - kagglehub
   - pytorch-cuda=12.1
   - tqdm
+  - reedsolo
   - pip:
       - tensorboard
+      - gdown

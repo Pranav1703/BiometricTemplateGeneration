@@ -2,10 +2,11 @@ name: biometric-env
 channels:
   - pytorch
   - defaults
+  - conda-forge
 dependencies:
   - python=3.10
   - pip
-  - numpy
+  - numpy=1.26
   - matplotlib
   - scikit-learn
   - opencv
@@ -15,5 +16,7 @@ dependencies:
   - torchaudio
   - kagglehub
   - tqdm
+  - gdown
+  - reedsolo
   - pip:
       - tensorboard
