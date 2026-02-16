@@ -6,28 +6,39 @@ This file provides essential information for agentic coding agents working in th
 
 ```
 BiometricTemplateGeneration/
+├── datasets/                    # Dataset directory
+│   ├── labels/                 # Generated CSV labels
+│   │   ├── FVC2000_labels/
+│   │   └── CASIA_labels/
+│   ├── FVC2000/               # FVC2000 raw dataset
+│   └── CASIA-dataset/         # CASIA raw dataset
+├── artifacts/                  # Generated outputs
+│   ├── models/                # Trained model files
+│   ├── embeddings/            # Generated embeddings
+│   ├── metrics/               # Evaluation metrics
+│   ├── plots/                 # Visualizations
+│   └── logs/                  # Training logs
 ├── src/
-│   ├── config.py                    # Centralized configuration
+│   ├── config.py              # Centralized configuration
 │   ├── fingerprint/
-│   │   ├── train.py                 # Unified training (--dataset flag)
-│   │   ├── test.py                  # Unified testing (--dataset, --mode flags)
-│   │   ├── inference/               # Embedding generation
-│   │   ├── core/                    # Biometric crypto systems
-│   │   └── benchmarks/              # Cancelable biometric benchmarks
-│   └── utils/                       # Consolidated utilities
-│       ├── Dataset_Loader.py       # Unified dataset loader
+│   │   ├── train.py           # Unified training (--dataset flag)
+│   │   ├── test.py            # Unified testing (--dataset, --mode flags)
+│   │   ├── inference/         # Embedding generation
+│   │   ├── core/              # Biometric crypto systems
+│   │   └── benchmarks/        # Cancelable biometric benchmarks
+│   └── utils/                 # Consolidated utilities
+│       ├── Dataset_Loader.py
 │       ├── preprocess_fingerprint.py
-│       ├── model_downloader.py     # Google Drive model download
-│       ├── hash_utils.py           # Cryptographic hashing
-│       ├── xor_utils.py            # XOR operations
-│       ├── quantization.py         # Embedding quantization
-│       ├── ecc_utils.py            # Error correction
-│       ├── logger.py               # Logging utilities
-│       └── gen_labels.py           # Label generation
-├── tests/                           # Test suite
-├── docs/                            # Documentation
-├── envs/                            # Conda environments
-└── artifacts/                       # Models, logs, plots
+│       ├── gen_labels.py
+│       ├── model_downloader.py
+│       ├── hash_utils.py
+│       ├── xor_utils.py
+│       ├── quantization.py
+│       ├── ecc_utils.py
+│       └── logger.py
+├── tests/                     # Test suite
+├── docs/                      # Documentation
+└── envs/                      # Conda environments
 ```
 
 ## Build and Test Commands
@@ -40,39 +51,50 @@ conda activate biometric-env
 pip install pytest gdown    # Install test and download dependencies
 ```
 
+### Auto-Setup (Creates Required Folders)
+```bash
+python -m src.config
+```
+
+### Dataset Download Links
+```bash
+# FVC2000 Dataset
+- Website: http://bias.csr.unibo.it/fvc2000/download.asp
+- Direct: https://static-content.springer.com/esm/chp%3A10.1007%2F978-3-030-83624-5_4/MediaObjects/74034_3_En_4_MOESM1_ESM.zip
+
+# CASIA Dataset
+- Drive: https://drive.google.com/drive/folders/1yFb8jmAO72nIamSHVKkXtmCY5I52iRCX?usp=sharing
+```
+
 ### Dataset Preparation
 ```bash
 # Generate FVC2000 training/validation labels
-python src/utils/gen_labels.py --dataset fvc2000
+python -m src.utils.gen_labels --dataset fvc2000
 
 # Generate CASIA labels
-python src/utils/gen_labels.py --dataset casia
-
-# With custom paths (optional)
-python src/utils/gen_labels.py --dataset fvc2000 --root ./datasets/FVC2000/DB1_a --outdir ./datasets/FVC2000/labels
-python src/utils/gen_labels.py --dataset casia --root ./datasets/CASIA-dataset --outdir ./datasets/CASIA-dataset/labels
+python -m src.utils.gen_labels --dataset casia
 ```
 
 ### Training (Unified - supports both datasets)
 ```bash
-python src/fingerprint/train.py --dataset fvc2000
-python src/fingerprint/train.py --dataset casia
-python src/fingerprint/train.py --dataset fvc2000 --resume artifacts/models/fvc2000_arcface_model.pth
+python -m src.fingerprint.train --dataset fvc2000
+python -m src.fingerprint.train --dataset casia
+python -m src.fingerprint.train --dataset fvc2000 --resume artifacts/models/fvc2000_arcface_model.pth
 ```
 
 ### Testing (Unified - multiple modes)
 ```bash
 # Generate embeddings
-python src/fingerprint/test.py --dataset fvc2000 --mode generate
+python -m src.fingerprint.test --dataset fvc2000 --mode generate
 
 # Evaluate (EER, FAR, FRR)
-python src/fingerprint/test.py --dataset fvc2000 --mode evaluate
+python -m src.fingerprint.test --dataset fvc2000 --mode evaluate
 
 # Visualize similarity distributions
-python src/fingerprint/test.py --dataset fvc2000 --mode visualize
+python -m src.fingerprint.test --dataset fvc2000 --mode visualize
 
 # Run all steps
-python src/fingerprint/test.py --dataset fvc2000 --mode all
+python -m src.fingerprint.test --dataset fvc2000 --mode all
 ```
 
 ### Running Tests
@@ -93,7 +115,7 @@ python -m pytest tests/ -v
 ### Model Management
 ```bash
 # Download pre-trained models from Google Drive
-python src/utils/model_downloader.py
+python -m src.utils.model_downloader
 ```
 
 ## Code Style Guidelines

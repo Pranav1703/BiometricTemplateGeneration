@@ -1,3 +1,9 @@
+"""
+Docstring for src.config
+to create the folder structure run this cmd:
+python -m src.config
+"""
+
 import os
 
 # Base directory of the project (project root)
