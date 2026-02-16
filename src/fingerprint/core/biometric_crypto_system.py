@@ -13,9 +13,9 @@ except ImportError:
 from src.utils.hash_utils import get_sha256_hash
 from src.utils.xor_utils import xor_bytes
 from src.utils.quantization import quantize_embedding, dequantize_embedding
-from src.fingerprint.ecc_wrapper import ECCWrapper
-from src.fingerprint.cancelable_transform import CancelableTransform
-from src.fingerprint.fuzzy_commitment import FuzzyCommitment
+from src.utils.ecc_utils import ECCWrapper
+from src.fingerprint.core.cancelable_transform import CancelableTransform
+from src.fingerprint.core.fuzzy_commitment import FuzzyCommitment
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -67,13 +67,14 @@ class BiometricCryptoSystem:
             ... )
         """
         self.embedding_dim = embedding_dim
+        self.key_size = key_size
+        self.ecc_capacity = ecc_capacity
 
         # Initialize components
         self.cancelable = CancelableTransform(embedding_dim, alpha=cancelable_alpha)
-        self.ecc = ECCWrapper(
-            message_size=key_size, error_capacity_percent=ecc_capacity
+        self.fuzzy = FuzzyCommitment(
+            key_size=key_size, ecc_capacity=ecc_capacity, embedding_dim=embedding_dim
         )
-        self.fuzzy = FuzzyCommitment(self.ecc)
 
         logger.info("=" * 60)
         logger.info("Biometric CryptoSystem initialized")
@@ -237,20 +238,11 @@ class BiometricCryptoSystem:
         Returns:
             Dictionary with system configuration
         """
-        ecc_symbols = (
-            len(self.ecc.rsc.encode(b"\x00" * self.ecc.message_size))
-            - self.ecc.message_size
-        )
-
         return {
             "embedding_dim": self.embedding_dim,
-            "key_size_bits": self.ecc.message_size * 8,
-            "key_size_bytes": self.ecc.message_size,
-            "ecc_capacity": self.ecc.message_size
-            * 0.2
-            / (self.ecc.message_size + ecc_symbols),  # Approximate
-            "ecc_symbols": ecc_symbols,
-            "codeword_length": self.ecc.message_size + ecc_symbols,
+            "key_size_bits": self.key_size * 8,
+            "key_size_bytes": self.key_size,
+            "ecc_capacity": self.ecc_capacity,
             "cancelable_alpha": self.cancelable.alpha,
         }
 
