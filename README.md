@@ -1,107 +1,172 @@
-# Biometric template generation
+# Biometric Template Generation
 
-A multimodal biometric recognition system that uses both fingerprint and iris images to identify individuals. Separate deep learning models extract embeddings for each modality, which are then fused to form a compact biometric template — a numerical representation that can be stored securely and used for efficient, privacy-preserving authentication or identification.
+A fingerprint recognition system using deep learning (ResNet50 + ArcFace) for feature extraction. Supports multiple datasets (CASIA, FVC2000) with cancelable biometric techniques for privacy-preserving template protection.
 
-### Venvs Creation
+## Quick Start
 
-- for cpu
-
-```bash
-    conda env create -f envs\environment-cpu.yml
-```
-
-- for gpu
+### 1. Environment Setup
 
 ```bash
-    conda env create -f envs\environment-gpu.yml
+# Create environment
+conda env create -f envs/environment-cpu.yml   # CPU
+conda env create -f envs/environment-gpu.yml     # GPU
+
+# Activate
+conda activate biometric-env
+
+# Install additional dependencies
+pip install pytest gdown
 ```
 
-### Venv activation
+### 2. Download Datasets
+
+#### FVC2000 Dataset
+- **Website**: http://bias.csr.unibo.it/fvc2000/download.asp
+- **Direct Download**: https://static-content.springer.com/esm/chp%3A10.1007%2F978-3-030-83624-5_4/MediaObjects/74034_3_En_4_MOESM1_ESM.zip
+- Extract to: `datasets/FVC2000/DB1_a/`
+
+#### CASIA Dataset
+- **Drive**: https://drive.google.com/drive/folders/1yFb8jmAO72nIamSHVKkXtmCY5I52iRCX?usp=sharing
+- Extract to: `datasets/CASIA-dataset/`
+
+### 3. Auto-Setup (Creates Required Folders)
 
 ```bash
-    conda activate biometric-env
+# This creates all necessary directories automatically
+python -m src.config
 ```
 
-### Dataset prep
-Dataset - https://www.kaggle.com/datasets/ninadmehendale/multimodal-iris-fingerprint-biometric-data
-
-run this command to generate coresponding csv files for fingerprint and iris images.
+### 4. Generate Labels
 
 ```bash
-python data/gen-labels.py --root ./IRIS_and_FINGERPRINT_DATASET --outdir ./labels
+# Generate FVC2000 labels
+python -m src.utils.gen_labels --dataset fvc2000
+
+# Generate CASIA labels
+python -m src.utils.gen_labels --dataset casia
 ```
+
+### 5. Train Model
+
+```bash
+# Train on FVC2000
+python -m src.fingerprint.train --dataset fvc2000
+
+# Train on CASIA
+python -m src.fingerprint.train --dataset casia
+```
+
+### 6. Test/Evaluate
+
+```bash
+# Generate embeddings
+python -m src.fingerprint.test --dataset fvc2000 --mode generate
+
+# Evaluate (EER, FAR, FRR)
+python -m src.fingerprint.test --dataset fvc2000 --mode evaluate
+
+# Visualize similarity distributions
+python -m src.fingerprint.test --dataset fvc2000 --mode visualize
+```
+
 ## Project Structure
+
 ```
 BiometricTemplateGeneration/
-├── data/                          # Dataset directory
-│   ├── labels/                    # Generated labels for training/validation
-│   │   ├── fingerprint_train.csv
-│   │   ├── fingerprint_val.csv
-│   │   ├── iris_train.csv
-│   │   └── iris_val.csv
-│   └── IRIS and FINGERPRINT DATASET/  # Raw biometric dataset
-│       ├── 1/                     # Subject 1
-│       │   ├── Fingerprint/       # Fingerprint images (.BMP)
-│       │   │   ├── 1__M_Right_thumb_finger.BMP
-│       │   │   ├── 1__M_Right_index_finger.BMP
-│       │   │   ├── 1__M_Right_middle_finger.BMP
-│       │   │   ├── 1__M_Right_ring_finger.BMP
-│       │   │   ├── 1__M_Right_little_finger.BMP
-│       │   │   ├── 1__M_Left_thumb_finger.BMP
-│       │   │   ├── 1__M_Left_index_finger.BMP
-│       │   │   ├── 1__M_Left_middle_finger.BMP
-│       │   │   ├── 1__M_Left_ring_finger.BMP
-│       │   │   └── 1__M_Left_little_finger.BMP
-│       │   ├── right/             # Right eye iris images (.bmp)
-│       │   │   ├── aevar1.bmp
-│       │   │   ├── aevar2.bmp
-│       │   │   ├── aevar3.bmp
-│       │   │   ├── aevar4.bmp
-│       │   │   └── aevar5.bmp
-│       │   └── left/              # Left eye iris images (.bmp)
-│       ├── 2/                     # Subject 2
-│       ├── 3/                     # Subject 3
-│       ├── ...                    # Subjects 4-45
-│       └── 45/                    # Subject 45
-├── artifacts/                     # Generated artifacts and outputs
-│   ├── plots/                     # Training plots and visualizations
-│   │   └── tensorboard/           # TensorBoard logs
-│   │       └── 20250819-031405/
-│   ├── models/                    # Trained model files
-│   │   └── fingerprint_embedding_model.pth
-│   └── logs/                      # Training logs
-│       └── training/
-│           ├── 20250819_031353/
-│           └── 20250819_031259/
-├── src/                           # Source code
-│   ├── config.py                  # Configuration settings
-│   ├── init.py                    # Package initialization
-│   ├── models/                    # Model implementations
-│   │   ├── init.py
-│   │   ├── fingerprint/           # Fingerprint model components
-│   │   │   ├── train.py           # Fingerprint training script
-│   │   │   ├── test.py            # Fingerprint testing script
-│   │   │   └── eval_threshold.py  # Threshold evaluation
-│   │   ├── Iris/                  # Iris model components
-│   │   │   ├── train.py           # Iris training script
-│   │   │   ├── test.py            # Iris testing script
-│   │   │   └── eval_threshold.py  # Threshold evaluation
-│   ├── preprocess/                # Data preprocessing modules
-│   │   ├── init.py
-│   │   ├── fingerprint.py         # Fingerprint preprocessing
-│   │   └── iris.py                # Iris preprocessing
-│   ├── utils/                     # Utility functions
-│   │   ├── init.py
-│   │   ├── Dataset_Loader.py      # Dataset loading utilities
-│   │   ├── gen_labels.py          # Label generation script
-│   │   ├── logger.py              # Logging utilities
-│   │   └── plot.py                # Plotting utilities
-├── envs/                          # Environment configurations
-│   ├── environment-cpu.yml        # CPU environment setup
-│   └── environment-gpu.yml        # GPU environment setup
-├── README.md                      # Project documentation
-├── requirements.txt               # Python dependencies
-└── .gitignore                     # Git ignore rules
+├── datasets/                    # Dataset directory
+│   ├── labels/                 # Generated CSV labels
+│   │   ├── FVC2000_labels/
+│   │   │   ├── fvc2000_train.csv
+│   │   │   └── fvc2000_val.csv
+│   │   └── CASIA_labels/
+│   │       ├── casia_train.csv
+│   │       └── casia_val.csv
+│   ├── FVC2000/               # FVC2000 raw dataset
+│   │   └── DB1_a/            # DB1_a fingerprint images
+│   └── CASIA-dataset/         # CASIA raw dataset
+├── artifacts/                  # Generated outputs
+│   ├── models/                # Trained model files (*_arcface_model.pth)
+│   ├── embeddings/            # Generated embeddings
+│   ├── metrics/               # Evaluation metrics
+│   ├── plots/                 # Visualizations
+│   │   └── tensorboard/       # TensorBoard logs
+│   └── logs/                  # Training logs
+├── src/                       # Source code
+│   ├── config.py              # Configuration & auto-folder creation
+│   ├── fingerprint/
+│   │   ├── train.py           # Unified training script
+│   │   ├── test.py            # Unified testing script
+│   │   ├── inference/         # Embedding generation
+│   │   ├── core/              # Biometric crypto systems
+│   │   └── benchmarks/        # Cancelable biometric benchmarks
+│   └── utils/                 # Utility functions
+│       ├── Dataset_Loader.py
+│       ├── preprocess_fingerprint.py
+│       ├── gen_labels.py
+│       ├── model_downloader.py
+│       ├── hash_utils.py
+│       ├── xor_utils.py
+│       ├── quantization.py
+│       ├── ecc_utils.py
+│       └── logger.py
+├── tests/                     # Test suite
+├── docs/                      # Documentation
+├── envs/                      # Conda environments
+│   ├── environment-cpu.yml
+│   └── environment-gpu.yml
+├── AGENTS.md                  # Agent guidelines
+└── README.md
 ```
 
-cancelable techniques.
+## Usage
+
+### Training
+```bash
+# Basic training
+python -m src.fingerprint.train --dataset fvc2000
+
+# Resume from checkpoint
+python -m src.fingerprint.train --dataset casia --resume artifacts/models/casia_arcface_model.pth
+```
+
+### Testing
+```bash
+# Generate embeddings
+python -m src.fingerprint.test --dataset fvc2000 --mode generate
+
+# Evaluate performance
+python -m src.fingerprint.test --dataset fvc2000 --mode evaluate
+
+# Run all (generate + evaluate + visualize)
+python -m src.fingerprint.test --dataset fvc2000 --mode all
+```
+
+### Download Pre-trained Models
+```bash
+python -m src.utils.model_downloader
+```
+
+### Running Tests
+```bash
+# All tests
+python -m pytest tests/
+
+# Single test
+python -m pytest tests/test_crypto_utils.py::test_sha256_determinism
+```
+
+## Features
+
+- **Deep Learning**: ResNet50 backbone with ArcFace loss for robust embeddings
+- **Multi-dataset**: Unified training/testing for CASIA and FVC2000
+- **Cancelable Biometrics**: Template protection techniques
+- **Automatic Setup**: Config auto-creates required directories
+- **Model Download**: Automatic download from Google Drive
+
+## Requirements
+
+- Python 3.10+
+- PyTorch + TorchVision
+- NumPy, OpenCV, scikit-learn
+- TensorBoard for visualization
+- Conda for environment management
