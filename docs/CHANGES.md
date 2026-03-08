@@ -4,9 +4,35 @@ This document details all the changes made to the Biometric Template Generation 
 
 ---
 
+## ⚠️ IMPORTANT UPDATE: Fuzzy Commitment → PBKDF2
+
+**Date**: 2026-02-22
+
+### What Changed
+- Replaced **Fuzzy Commitment** with **PBKDF2 Key Derivation** for template protection
+- Fuzzy Commitment failed because high-dimensional deep embeddings (512-dim) don't quantize well
+- PBKDF2 works with cancelable transform using similarity-based verification
+
+### Why
+- Fuzzy Commitment requires quantization that destroys information in continuous deep embeddings
+- Cancelable Transform + PBKDF2 uses cosine similarity (robust to noise) instead of exact key recovery
+
+### New Method
+```
+Enrollment: Embedding → Cancelable Transform → PBKDF2 → Key Hash
+Verification: Query → Same Transform → Similarity Check → Accept/Reject
+```
+
+### Benchmark Results (FVC2000)
+- AUC: 0.9915
+- EER: 0.0074
+- d-prime: 6.79
+
+---
+
 ## Overview
 
-This project implements a biometric cryptosystem combining cancelable biometrics and fuzzy commitment for privacy-preserving fingerprint authentication. The system generates cryptographic keys from biometric embeddings while providing template protection.
+This project implements a biometric cryptosystem combining **cancelable biometrics and PBKDF2** for privacy-preserving fingerprint authentication. The system generates cryptographic keys from biometric embeddings while providing template protection.
 
 ---
 

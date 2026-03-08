@@ -21,8 +21,12 @@ import matplotlib.pyplot as plt
 from src.config import (
     CASIA_VAL_CSV,
     FVC2000_VAL_CSV,
+    FVC2004_VAL_CSV,
     SAVED_MODELS_DIR,
     EMBEDDING_DIM,
+    EMBEDDING_DIR,
+    METRICS_DIR,
+    PLOTS_DIR,
 )
 from src.utils.Dataset_Loader import FingerprintDataset
 from src.utils.logger import get_logger
@@ -47,6 +51,12 @@ DATASET_CONFIG = {
         "batch_size": 32,
         "embeddings_file": "fvc2000_test_embeddings.pt",
     },
+    "fvc2004": {
+        "val_csv": FVC2004_VAL_CSV,
+        "model_name": "fvc2004_arcface_model.pth",
+        "batch_size": 32,
+        "embeddings_file": "fvc2004_test_embeddings.pt",
+    },
 }
 
 
@@ -60,7 +70,7 @@ def get_dataset_config(dataset_name):
 # --------------------------
 # Embedding Generation
 # --------------------------
-def generate_embeddings(dataset_name, output_dir="artifacts/embeddings"):
+def generate_embeddings(dataset_name, output_dir=EMBEDDING_DIR):
     """Generate and save embeddings for test dataset.
 
     Args:
@@ -144,9 +154,7 @@ def compute_similarity_matrix(embeddings):
     return similarity_matrix
 
 
-def evaluate_model(
-    dataset_name, embeddings_file=None, metrics_output_dir="artifacts/metrics"
-):
+def evaluate_model(dataset_name, embeddings_file=None, metrics_output_dir=METRICS_DIR):
     """Evaluate model performance using generated embeddings.
 
     Args:
@@ -159,9 +167,7 @@ def evaluate_model(
 
     # Determine embeddings file path
     if embeddings_file is None:
-        embeddings_file = os.path.join(
-            "artifacts/embeddings", config["embeddings_file"]
-        )
+        embeddings_file = os.path.join(EMBEDDING_DIR, config["embeddings_file"])
 
     if not os.path.exists(embeddings_file):
         logger.error(f"Embeddings file not found: {embeddings_file}")
@@ -266,9 +272,7 @@ def evaluate_model(
     return metrics
 
 
-def visualize_similarity(
-    embeddings_file=None, dataset_name=None, output_dir="artifacts/plots"
-):
+def visualize_similarity(embeddings_file=None, dataset_name=None, output_dir=PLOTS_DIR):
     """Visualize similarity distributions.
 
     Args:
@@ -278,9 +282,7 @@ def visualize_similarity(
     """
     if embeddings_file is None and dataset_name is not None:
         config = get_dataset_config(dataset_name)
-        embeddings_file = os.path.join(
-            "artifacts/embeddings", config["embeddings_file"]
-        )
+        embeddings_file = os.path.join(EMBEDDING_DIR, config["embeddings_file"])
 
     if not os.path.exists(embeddings_file):
         print(f"Embeddings file not found: {embeddings_file}")
@@ -362,8 +364,8 @@ Examples:
         "--dataset",
         type=str,
         required=True,
-        choices=["casia", "fvc2000"],
-        help="Dataset to test on (casia or fvc2000)",
+        choices=["casia", "fvc2000", "fvc2004"],
+        help="Dataset to test on (casia, fvc2000, or fvc2004)",
     )
 
     parser.add_argument(

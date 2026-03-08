@@ -25,6 +25,8 @@ from src.config import (
     CASIA_VAL_CSV,
     FVC2000_TRAIN_CSV,
     FVC2000_VAL_CSV,
+    FVC2004_TRAIN_CSV,
+    FVC2004_VAL_CSV,
     SAVED_MODELS_DIR,
     TENSORBOARD_DIR,
     EMBEDDING_DIM,
@@ -174,6 +176,15 @@ DATASET_CONFIG = {
         "learning_rate": 1e-4,
         "num_classes": 100,  # FVC2000 has 100 fingers
         "model_name": "fvc2000_arcface_model.pth",
+    },
+    "fvc2004": {
+        "train_csv": FVC2004_TRAIN_CSV,
+        "val_csv": FVC2004_VAL_CSV,
+        "batch_size": 32,
+        "epochs": 50,
+        "learning_rate": 1e-4,
+        "num_classes": 100,  # FVC2004 has 100 fingers
+        "model_name": "fvc2004_arcface_model.pth",
     },
 }
 
@@ -338,7 +349,7 @@ Examples:
         "--dataset",
         type=str,
         required=True,
-        choices=["casia", "fvc2000"],
+        choices=["casia", "fvc2000", "fvc2004"],
         help="Dataset to train on (casia or fvc2000)",
     )
 

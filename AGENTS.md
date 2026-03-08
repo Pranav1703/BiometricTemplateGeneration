@@ -14,7 +14,7 @@ BiometricTemplateGeneration/
 │   └── CASIA-dataset/         # CASIA raw dataset
 ├── artifacts/                  # Generated outputs
 │   ├── models/                # Trained model files
-│   ├── embeddings/            # Generated embeddings
+│   ├── embedding/             # Generated embeddings
 │   ├── metrics/               # Evaluation metrics
 │   ├── plots/                 # Visualizations
 │   └── logs/                  # Training logs
@@ -25,6 +25,9 @@ BiometricTemplateGeneration/
 │   │   ├── test.py            # Unified testing (--dataset, --mode flags)
 │   │   ├── inference/         # Embedding generation
 │   │   ├── core/              # Biometric crypto systems
+│   │   │   ├── biometric_crypto_system.py
+│   │   │   ├── cancelable_transform.py
+│   │   │   └── fuzzy_commitment.py
 │   │   └── benchmarks/        # Cancelable biometric benchmarks
 │   └── utils/                 # Consolidated utilities
 │       ├── Dataset_Loader.py
@@ -56,22 +59,9 @@ pip install pytest gdown    # Install test and download dependencies
 python -m src.config
 ```
 
-### Dataset Download Links
-```bash
-# FVC2000 Dataset
-- Website: http://bias.csr.unibo.it/fvc2000/download.asp
-- Direct: https://static-content.springer.com/esm/chp%3A10.1007%2F978-3-030-83624-5_4/MediaObjects/74034_3_En_4_MOESM1_ESM.zip
-
-# CASIA Dataset
-- Drive: https://drive.google.com/drive/folders/1yFb8jmAO72nIamSHVKkXtmCY5I52iRCX?usp=sharing
-```
-
 ### Dataset Preparation
 ```bash
-# Generate FVC2000 training/validation labels
 python -m src.utils.gen_labels --dataset fvc2000
-
-# Generate CASIA labels
 python -m src.utils.gen_labels --dataset casia
 ```
 
@@ -84,16 +74,9 @@ python -m src.fingerprint.train --dataset fvc2000 --resume artifacts/models/fvc2
 
 ### Testing (Unified - multiple modes)
 ```bash
-# Generate embeddings
 python -m src.fingerprint.test --dataset fvc2000 --mode generate
-
-# Evaluate (EER, FAR, FRR)
 python -m src.fingerprint.test --dataset fvc2000 --mode evaluate
-
-# Visualize similarity distributions
 python -m src.fingerprint.test --dataset fvc2000 --mode visualize
-
-# Run all steps
 python -m src.fingerprint.test --dataset fvc2000 --mode all
 ```
 
@@ -110,21 +93,36 @@ python -m pytest tests/test_crypto_utils.py::test_sha256_determinism
 
 # Run with verbose output
 python -m pytest tests/ -v
+
+# Run with detailed output on failures
+python -m pytest tests/ -v --tb=long
+
+# Run tests matching a pattern
+python -m pytest tests/ -k "test_sha256"
+
+# Stop on first failure
+python -m pytest tests/ -x
+```
+
+### Running Benchmarks
+```bash
+# Run cancelable biometric benchmark (FVC2000 embeddings)
+python -m src.fingerprint.benchmarks.cancelable_benchmark
 ```
 
 ### Model Management
 ```bash
-# Download pre-trained models from Google Drive
 python -m src.utils.model_downloader
 ```
 
 ## Code Style Guidelines
 
 ### Import Style
-- Group imports: stdlib, third-party, local
+- Group imports in order: stdlib, third-party, local
 - Use absolute imports: `from src.config import FVC2000_TRAIN_CSV`
 - Avoid wildcard imports: `from module import *`
 - Keep imports at file top, alphabetical within groups
+- Use try-except for optional dependencies (e.g., torch, cryptography)
 
 ### Naming Conventions
 - **Variables/functions**: `snake_case` (e.g., `preprocess_fingerprint`)
@@ -134,9 +132,10 @@ python -m src.utils.model_downloader
 - **Config variables**: `UPPER_SNAKE_CASE` in config files
 
 ### Type Hints
-- Use type hints for function signatures
+- Use type hints for all function signatures
 - Example: `def get_logger(name: str = "train") -> logging.Logger`
-- Import types from `typing` when needed
+- Import types from `typing` when needed (Tuple, Dict, List, Optional)
+- Use `np.ndarray` for numpy arrays, `torch.Tensor` for PyTorch
 
 ### File Structure
 - Source code in `src/`
@@ -145,72 +144,90 @@ python -m src.utils.model_downloader
 - Artifacts in `artifacts/`
 - Use `__init__.py` for proper package structure
 
+### Formatting
+- Maximum line length: 100 characters
+- Use 4 spaces for indentation (not tabs)
+- Add blank lines between functions and classes
+- Use Black-style formatting for clarity
+
+### Error Handling
+- Try-except for file I/O operations
+- Validate input types and ranges at function entry
+- Raise descriptive exceptions with context
+- Use assertions in tests for expected conditions
+- Log warnings instead of silent failures when appropriate
+
 ### Logging
 - Use centralized logger: `from src.utils.logger import get_logger`
-- Descriptive names: `logger = get_logger("fingerprint_train")`
-- Levels: DEBUG (details), INFO (progress), WARNING/ERROR (issues)
+- Descriptive logger names: `logger = get_logger("fingerprint_train")`
+- Log levels: DEBUG (details), INFO (progress), WARNING/ERROR (issues)
+- Avoid excessive logging that slows down execution
 
 ### Configuration
 - Centralized in `src/config.py`
-- Use `os.path.join()` for paths
-- Create directories: `os.makedirs(dir, exist_ok=True)`
-
-### Error Handling
-- Try-catch for file I/O
-- Validate input types/ranges
-- Raise descriptive exceptions
-- Use assertions in tests
+- Use `os.path.join()` for cross-platform paths
+- Create directories with `os.makedirs(dir, exist_ok=True)`
+- Use pathlib for modern path handling when appropriate
 
 ### Deep Learning Best Practices
 - Device-agnostic: `DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")`
 - L2 normalize embeddings: `nn.functional.normalize(x, p=2, dim=1)`
-- Proper DataLoader with batch size
-- Save models with state dictionaries
-- Use TensorBoard for visualization
+- Proper DataLoader with appropriate batch size
+- Save models with state dictionaries: `torch.save(model.state_dict(), path)`
+- Use `model.eval()` and `with torch.no_grad():` for inference
 
 ### Biometric Patterns
 - L2 normalization for unit hypersphere embeddings
-- Cosine similarity for comparison
+- Cosine similarity for comparison: `np.dot(a, b) / (||a|| * ||b||)`
 - Dataset splitting to avoid data leakage
-- Quantization for template protection
+- Cancelable transform: `R = α × R_bio + (1-α) × R_key`
 
 ### Testing Guidelines
-- Descriptive names: `test_sha256_determinism`
-- Use pytest fixtures
-- Test edge cases and errors
+- Descriptive test names: `test_sha256_determinism`
+- Use pytest fixtures for reusable test data
+- Test edge cases and error conditions
 - Test crypto functions with known inputs
+- Group related tests in classes
 
 ### Security
-- Never hardcode secrets/API keys
-- Use proper randomness for crypto
-- Validate inputs in preprocessing
-- Follow secure coding for biometric data
+- Never hardcode secrets/API keys in source code
+- Use `os.urandom()` for cryptographic randomness
+- Validate inputs in preprocessing functions
+- Follow secure coding practices for biometric data
+- Use PBKDF2 for key derivation (not fuzzy commitment for deep embeddings)
 
 ## Common Patterns
+
+### Cancelable Biometrics (Recommended)
+```python
+from src.fingerprint.core.cancelable_transform import CancelableTransform
+
+transform = CancelableTransform(embedding_dim=512, alpha=0.6)
+
+# Enrollment
+template, params = transform.enroll_with_key(embedding, user_key)
+
+# Verification
+success, key = transform.verify_with_key(query_embedding, template, params)
+```
 
 ### Dataset Loading
 ```python
 from src.utils.Dataset_Loader import FingerprintDataset
 
 dataset = FingerprintDataset('path/to/labels.csv', train=True)
-# Auto-detects dataset type from CSV path
 ```
 
-### Training
-```python
-from src.fingerprint.train import train
+### Running Full Pipeline
+```bash
+# 1. Train model
+python -m src.fingerprint.train --dataset fvc2000
 
-train('fvc2000')  # or 'casia'
-# Supports: --dataset, --resume flags
+# 2. Generate embeddings
+python -m src.fingerprint.test --dataset fvc2000 --mode generate
+
+# 3. Run benchmarks
+python -m src.fingerprint.benchmarks.cancelable_benchmark
 ```
 
-### Testing
-```python
-from src.fingerprint.test import generate_embeddings, evaluate_model
-
-generate_embeddings('fvc2000')
-evaluate_model('fvc2000')
-# Modes: generate, evaluate, visualize, all
-```
-
-This project focuses on biometric template generation with privacy-preserving techniques and deep learning-based feature extraction.
+This project focuses on biometric template generation with privacy-preserving techniques using **Cancelable Biometrics + PBKDF2** (not fuzzy commitment, which fails with high-dimensional deep embeddings).

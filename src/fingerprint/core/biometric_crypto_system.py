@@ -10,12 +10,7 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
 
-from src.utils.hash_utils import get_sha256_hash
-from src.utils.xor_utils import xor_bytes
-from src.utils.quantization import quantize_embedding, dequantize_embedding
-from src.utils.ecc_utils import ECCWrapper
 from src.fingerprint.core.cancelable_transform import CancelableTransform
-from src.fingerprint.core.fuzzy_commitment import FuzzyCommitment
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,66 +18,60 @@ logger = logging.getLogger(__name__)
 
 class BiometricCryptoSystem:
     """
-    Complete biometric cryptosystem with cancelable transform + fuzzy commitment.
+    Complete biometric cryptosystem with cancelable transform + PBKDF2 key derivation.
 
     Architecture:
-    Raw Embedding → Cancelable Transform → Fuzzy Commitment → Protected Template
+    Raw Embedding → Cancelable Transform → PBKDF2 → Protected Template
+
+    Note: Uses similarity-based verification (cosine similarity) which is robust
+    to biometric variation, unlike fuzzy commitment which fails with high-dim embeddings.
 
     Security Properties:
     1. Cancelable: Revocable templates, unlinkable across applications
-    2. Fuzzy Commitment: Cryptographically binding, non-invertible
-    3. Multi-layered: Defense in depth
-    4. Key Generation: Generates 256-bit cryptographic key from biometrics
+    2. PBKDF2: Cryptographic key derivation from transformed embedding
+    3. Non-invertibility: Without user_key, original cannot be recovered
 
     Template Format:
     {
-        'cancelable_params': dict,  # For cancelable layer verification
-        'hash_key': str,           # For fuzzy commitment verification
-        'helper_data': np.ndarray   # δ from fuzzy commitment
+        'transformed': np.ndarray,    # Transformed embedding
+        'salt': bytes,               # Random salt for PBKDF2
+        'key_hash': bytes,           # SHA-256 hash of derived key
+        'cancelable_params': dict    # For verification
     }
+
+    Usage:
+        >>> system = BiometricCryptoSystem(embedding_dim=512, cancelable_alpha=0.6)
+        >>> template = system.enroll(embedding, "user_001")
+        >>> success, key = system.verify(query_embedding, template, "user_001")
     """
 
     def __init__(
         self,
         embedding_dim: int = 512,
         key_size: int = 32,
-        ecc_capacity: float = 0.2,
         cancelable_alpha: float = 0.6,
     ):
         """
-        Initialize complete biometric cryptosystem.
+        Initialize the biometric cryptosystem.
 
         Args:
-            embedding_dim: Dimension of embeddings (default 512)
-            key_size: Cryptographic key size in bytes (default 32 for 256-bit)
-            ecc_capacity: Error correction capacity (default 0.2 for 20%)
-            cancelable_alpha: Balance in cancelable transform (default 0.6)
-
-        Example:
-            >>> system = BiometricCryptoSystem(
-            ...     embedding_dim=512,
-            ...     key_size=32,
-            ...     ecc_capacity=0.2,
-            ...     cancelable_alpha=0.6
-            ... )
+            embedding_dim: Dimension of biometric embeddings (default: 512)
+            key_size: Size of cryptographic key in bytes (default: 32 = 256-bit)
+            cancelable_alpha: Cancelable transform blending parameter (default: 0.6)
         """
         self.embedding_dim = embedding_dim
         self.key_size = key_size
-        self.ecc_capacity = ecc_capacity
+        self.cancelable_alpha = cancelable_alpha
 
-        # Initialize components
         self.cancelable = CancelableTransform(embedding_dim, alpha=cancelable_alpha)
-        self.fuzzy = FuzzyCommitment(
-            key_size=key_size, ecc_capacity=ecc_capacity, embedding_dim=embedding_dim
-        )
 
         logger.info("=" * 60)
         logger.info("Biometric CryptoSystem initialized")
         logger.info("=" * 60)
         logger.info(f"  Embedding dim: {embedding_dim}")
         logger.info(f"  Key size: {key_size * 8} bits")
-        logger.info(f"  ECC capacity: {ecc_capacity * 100:.1f}%")
         logger.info(f"  Cancelable alpha: {cancelable_alpha}")
+        logger.info("  Method: Cancelable + PBKDF2")
         logger.info("=" * 60)
 
     def enroll(self, raw_embedding: np.ndarray, user_key: str) -> Dict:
@@ -98,36 +87,27 @@ class BiometricCryptoSystem:
 
         Example:
             >>> system = BiometricCryptoSystem()
-            >>> embedding = backbone(img)  # Get embedding from trained model
+            >>> embedding = backbone(img)
             >>> template = system.enroll(embedding, "user_001")
             >>> print(template.keys())
-            >>> # dict_keys(['cancelable_params', 'hash_key', 'helper_data'])
         """
         logger.info(f"Enrolling template for user_key: {user_key}")
 
-        # Ensure numpy array and correct shape
         if TORCH_AVAILABLE and hasattr(raw_embedding, "detach"):
             raw_embedding = raw_embedding.detach().cpu().numpy()
         raw_embedding = np.array(raw_embedding).flatten().astype(np.float32)
 
-        # Step 1: Apply cancelable transform
-        logger.debug("Step 1: Applying cancelable transform...")
-        transformed_embedding, cancelable_params = self.cancelable.enroll(
+        norm = np.linalg.norm(raw_embedding)
+        if norm > 0:
+            raw_embedding = raw_embedding / norm
+
+        template, cancelable_params = self.cancelable.enroll_with_key(
             raw_embedding, user_key
         )
 
-        # Step 2: Apply fuzzy commitment
-        logger.debug("Step 2: Applying fuzzy commitment...")
-        hash_key, helper_data = self.fuzzy.enroll(transformed_embedding)
+        template["cancelable_params"] = cancelable_params
 
-        # Step 3: Construct protected template
-        template = {
-            "cancelable_params": cancelable_params,
-            "hash_key": hash_key,
-            "helper_data": helper_data,
-        }
-
-        logger.info(f"Enrollment completed. Template size: {len(helper_data)} bytes")
+        logger.info("Enrollment completed successfully")
 
         return template
 
@@ -147,34 +127,19 @@ class BiometricCryptoSystem:
 
             - success: True if authentication succeeded
             - recovered_key: 256-bit cryptographic key if successful
-
-        Example:
-            >>> system = BiometricCryptoSystem()
-            >>> template = system.enroll(enrollment_embedding, "user_001")
-            >>> # Later, during authentication...
-            >>> query_embedding = backbone(query_img)
-            >>> success, key = system.verify(query_embedding, template, "user_001")
-            >>> print(f"Authenticated: {success}")
-            >>> if success:
-            ...     print(f"Recovered key: {key.hex()}")
         """
         logger.info(f"Verifying template for user_key: {user_key}")
 
-        # Ensure numpy array and correct shape
         if TORCH_AVAILABLE and hasattr(raw_embedding, "detach"):
             raw_embedding = raw_embedding.detach().cpu().numpy()
         raw_embedding = np.array(raw_embedding).flatten().astype(np.float32)
 
-        # Step 1: Apply cancelable transform
-        logger.debug("Step 1: Applying cancelable transform...")
-        transformed_embedding = self.cancelable.verify(
-            raw_embedding, template["cancelable_params"]
-        )
+        norm = np.linalg.norm(raw_embedding)
+        if norm > 0:
+            raw_embedding = raw_embedding / norm
 
-        # Step 2: Apply fuzzy commitment verification
-        logger.debug("Step 2: Verifying fuzzy commitment...")
-        success, recovered_key = self.fuzzy.verify(
-            transformed_embedding, template["hash_key"], template["helper_data"]
+        success, recovered_key = self.cancelable.verify_with_key(
+            raw_embedding, template, template["cancelable_params"]
         )
 
         if success:
@@ -197,118 +162,25 @@ class BiometricCryptoSystem:
 
         Returns:
             New protected template dictionary
-
-        Example:
-            >>> system = BiometricCryptoSystem()
-            >>> # User wants to cancel old template
-            >>> new_template = system.cancel_and_reissue(
-            ...     enrollment_embedding,
-            ...     "user_001",
-            ...     "user_002"
-            ... )
-            >>> # Old templates are now invalid
         """
         logger.info(
             f"Cancelling old template ({old_user_key}) and issuing new ({new_user_key})"
         )
 
-        # Cancel old template and get new transformed embedding
-        new_transformed, new_cancelable_params = self.cancelable.cancel(
-            old_user_key, new_user_key, raw_embedding
+        new_template, new_cancelable_params = self.cancelable.enroll_with_key(
+            raw_embedding, new_user_key
         )
-
-        # Re-enroll with fuzzy commitment
-        hash_key, helper_data = self.fuzzy.enroll(new_transformed)
-
-        # Construct new template
-        new_template = {
-            "cancelable_params": new_cancelable_params,
-            "hash_key": hash_key,
-            "helper_data": helper_data,
-        }
+        new_template["cancelable_params"] = new_cancelable_params
 
         logger.info("New template issued successfully")
 
         return new_template
 
     def get_system_info(self) -> Dict:
-        """
-        Get system configuration and parameters.
-
-        Returns:
-            Dictionary with system configuration
-        """
+        """Get system configuration and parameters."""
         return {
             "embedding_dim": self.embedding_dim,
-            "key_size_bits": self.key_size * 8,
-            "key_size_bytes": self.key_size,
-            "ecc_capacity": self.ecc_capacity,
-            "cancelable_alpha": self.cancelable.alpha,
+            "key_size": self.key_size,
+            "cancelable_alpha": self.cancelable_alpha,
+            "method": "Cancelable + PBKDF2",
         }
-
-
-if __name__ == "__main__":
-    # Test complete biometric crypto system
-    print("\n" + "=" * 60)
-    print("Testing Complete Biometric CryptoSystem")
-    print("=" * 60)
-
-    system = BiometricCryptoSystem(
-        embedding_dim=512, key_size=32, ecc_capacity=0.2, cancelable_alpha=0.6
-    )
-
-    # Print system info
-    print("\nSystem Configuration:")
-    info = system.get_system_info()
-    for key, value in info.items():
-        print(f"  {key}: {value}")
-
-    # Generate test embeddings
-    print("\nGenerating test embeddings...")
-    enrollment_emb = np.random.randn(512).astype(np.float32)
-    enrollment_emb = enrollment_emb / np.linalg.norm(enrollment_emb)
-
-    # Test 1: Enrollment
-    print("\n" + "-" * 60)
-    print("Test 1: Enrollment")
-    print("-" * 60)
-    template = system.enroll(enrollment_emb, "user_001")
-    print(f"Template keys: {template.keys()}")
-    print(f"Cancel params: {template['cancelable_params']['user_key']}")
-    print(f"Key hash: {template['hash_key'][:16]}...")
-    print(f"Helper data size: {len(template['helper_data'])} bytes")
-
-    # Test 2: Verification with same embedding
-    print("\n" + "-" * 60)
-    print("Test 2: Verification (same embedding)")
-    print("-" * 60)
-    success, key = system.verify(enrollment_emb, template, "user_001")
-    print(f"Success: {success}")
-    if success:
-        print(f"Recovered key: {key.hex()[:32] if key else 'None'}...")
-
-    # Test 3: Verification with small noise
-    print("\n" + "-" * 60)
-    print("Test 3: Verification (small noise)")
-    print("-" * 60)
-    query_emb = enrollment_emb + np.random.randn(512) * 0.001
-    query_emb = query_emb / np.linalg.norm(query_emb)
-    success, key = system.verify(query_emb, template, "user_001")
-    print(f"Success: {success}")
-
-    # Test 4: Cancellation and reissuance
-    print("\n" + "-" * 60)
-    print("Test 4: Cancellation and Reissuance")
-    print("-" * 60)
-    new_template = system.cancel_and_reissue(enrollment_emb, "user_001", "user_002")
-    print(f"New template user_key: {new_template['cancelable_params']['user_key']}")
-
-    # Old template should no longer work
-    print("\nTesting old template (should fail):")
-    success, _ = system.verify(query_emb, template, "user_001")
-    print(f"Old template valid: {success}")
-
-    # New template should work
-    print("\nTesting new template (should succeed):")
-    success, key = system.verify(query_emb, new_template, "user_002")
-    print(f"New template valid: {success}")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Phase 2 Integration Test
-Tests complete biometric cryptosystem: cancelable transform + fuzzy commitment
+Tests complete biometric cryptosystem: cancelable transform + PBKDF2
 """
 
 import sys

@@ -1,12 +1,15 @@
 """
 Unified Label Generation Script for Fingerprint Datasets
-Supports: CASIA and FVC2000 datasets
+Supports: CASIA, FVC2000, and FVC2004 datasets
 
 Usage:
   # Generate labels for FVC2000 dataset
   python -m src.utils.gen_labels --dataset fvc2000
-  
-  # Generate labels for CASIA dataset  
+
+  # Generate labels for FVC2004 dataset
+  python -m src.utils.gen_labels --dataset fvc2004
+
+  # Generate labels for CASIA dataset
   python -m src.utils.gen_labels --dataset casia
 """
 
@@ -16,7 +19,14 @@ import random
 import re
 from pathlib import Path
 from typing import List, Tuple, Optional
-from src.config import FVC2000_LABELS_DIR, FVC2000_DB1A_DIR, CASIA_LABELS_DIR, CASIA_DIR
+from src.config import (
+    FVC2000_LABELS_DIR,
+    FVC2000_DB1A_DIR,
+    FVC2004_LABELS_DIR,
+    FVC2004_DB1A_DIR,
+    CASIA_LABELS_DIR,
+    CASIA_DIR,
+)
 from src.utils.logger import get_logger
 
 ALLOWED_EXT = {".bmp", ".png", ".jpg", ".jpeg", ".tif", ".tiff"}
@@ -51,6 +61,46 @@ def scan_fvc2000_root(root: Path) -> List[Tuple[str, str]]:
             person_id = extract_fvc2000_person_id(p.name)
             if person_id:
                 fingerprint_rows.append((str(p), person_id))
+
+    return fingerprint_rows
+
+
+# --------------------------
+# FVC2004 Dataset Functions (using Db1_a only)
+# --------------------------
+def scan_fvc2004_root(root: Path) -> List[Tuple[str, str]]:
+    """
+    Scans FVC2004 dataset (Db1_a only).
+    Expected pattern: ID_Impression.tif (e.g., 1_1.tif, 100_8.tif)
+    """
+    fingerprint_rows = []
+
+    # Check if root has subdirectories (Db1_a)
+    subdirs = [d for d in root.iterdir() if d.is_dir() and d.name.startswith("Db")]
+
+    if subdirs:
+        # Use Db1_a only
+        db1_dir = None
+        for d in subdirs:
+            if d.name == "Db1_a":
+                db1_dir = d
+                break
+
+        if db1_dir:
+            all_files = sorted(db1_dir.iterdir())
+            for p in all_files:
+                if p.is_file() and p.suffix.lower() in ALLOWED_EXT:
+                    person_id = extract_fvc2000_person_id(p.name)
+                    if person_id:
+                        fingerprint_rows.append((str(p), person_id))
+    else:
+        # Single flat directory
+        all_files = sorted(root.iterdir())
+        for p in all_files:
+            if p.is_file() and p.suffix.lower() in ALLOWED_EXT:
+                person_id = extract_fvc2000_person_id(p.name)
+                if person_id:
+                    fingerprint_rows.append((str(p), person_id))
 
     return fingerprint_rows
 
@@ -147,6 +197,12 @@ DATASET_SCANNERS = {
         "default_outdir": FVC2000_LABELS_DIR,
         "csv_prefix": "fvc2000",
     },
+    "fvc2004": {
+        "scanner": scan_fvc2004_root,
+        "default_root": FVC2004_DB1A_DIR,
+        "default_outdir": FVC2004_LABELS_DIR,
+        "csv_prefix": "fvc2004",
+    },
     "casia": {
         "scanner": scan_casia_root,
         "default_root": CASIA_DIR,
@@ -226,6 +282,9 @@ Examples:
   # Generate labels for FVC2000 dataset
   python -m src.utils.gen_labels --dataset fvc2000
   
+  # Generate labels for FVC2004 dataset
+  python -m src.utils.gen_labels --dataset fvc2004
+  
   # Generate labels for CASIA dataset  
   python -m src.utils.gen_labels --dataset casia
   
@@ -241,7 +300,7 @@ Examples:
         "--dataset",
         type=str,
         required=True,
-        choices=["casia", "fvc2000"],
+        choices=["casia", "fvc2000", "fvc2004"],
         help="Dataset to generate labels for",
     )
 
