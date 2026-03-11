@@ -6,6 +6,7 @@ import os
 
 from src.fingerprint.train import FingerprintEmbeddingNet
 from src.fingerprint.preprocess_fingerprint import preprocess_fingerprint
+from src.config import SAVED_MODELS_DIR
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 EMBEDDING_DIM = 512  
@@ -13,8 +14,9 @@ EMBEDDING_DIM = 512
 # ---------------------------
 # 1. Load trained backbone
 # ---------------------------
+MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "casia_arcface_model.pth")
 backbone = FingerprintEmbeddingNet(embedding_dim=EMBEDDING_DIM).to(DEVICE)
-checkpoint = torch.load("artifacts/models/fingerprint_arcface_model.pth", map_location=DEVICE,  weights_only=True)
+checkpoint = torch.load(MODEL_PATH, map_location=DEVICE,  weights_only=True)
 backbone.load_state_dict(checkpoint["backbone"])
 backbone.eval()
 
