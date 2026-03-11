@@ -69,7 +69,6 @@ def get_embeddings(img_path: str, user_key: str):
     # Move results to CPU only if needed
     return embedding.cpu(), protected.cpu()
 
-
 # ---------------------------
 # 4. Example usage
 # ---------------------------
