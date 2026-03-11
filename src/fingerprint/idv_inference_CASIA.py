@@ -23,30 +23,24 @@ backbone.eval()
 # 2. Dynamic Projection Function
 # ---------------------------
 def generate_dynamic_projection(embedding: torch.Tensor, user_key: str, alpha: float = 0.5) -> torch.Tensor:
-    """
-    Creates a hybrid dynamic projection matrix using:
-    - Biometric-driven component (from embedding)
-    - Key-driven random component (from user/session key)
-    """
-    emb_np = embedding.cpu().numpy()
-
-    # ---- (A) Key-based random matrix ----
+    # 1. Key-based random matrix (Directly on GPU)
     seed = int(hashlib.sha256(user_key.encode()).hexdigest(), 16) % (2**32)
-    rng = np.random.default_rng(seed)
-    R_key = rng.standard_normal((EMBEDDING_DIM, EMBEDDING_DIM))
-    R_key /= np.linalg.norm(R_key, axis=1, keepdims=True)
+    generator = torch.Generator(device=DEVICE).manual_seed(seed)
+    
+    # Generate R_key on GPU
+    R_key = torch.randn((EMBEDDING_DIM, EMBEDDING_DIM), generator=generator, device=DEVICE)
+    R_key = F.normalize(R_key, p=2, dim=1)
 
-    # ---- (B) Biometric-driven matrix ----
-    E_norm = emb_np / np.linalg.norm(emb_np)
-    # Outer product to get a 512×512 matrix
-    R_bio = np.outer(E_norm, E_norm)
-    R_bio /= np.linalg.norm(R_bio, axis=1, keepdims=True)
+    # 2. Biometric-driven matrix (Directly on GPU)
+    E_norm = F.normalize(embedding, p=2, dim=0)
+    R_bio = torch.outer(E_norm, E_norm)
+    R_bio = F.normalize(R_bio, p=2, dim=1)
 
-    # ---- (C) Combine both ----
+    # 3. Hybrid Combine
     R_dyn = alpha * R_bio + (1 - alpha) * R_key
-    R_dyn /= np.linalg.norm(R_dyn, axis=1, keepdims=True)
+    R_dyn = F.normalize(R_dyn, p=2, dim=1)
 
-    return torch.tensor(R_dyn, dtype=torch.float32)
+    return R_dyn # stays on GPU
 
 
 # ---------------------------
