@@ -1,13 +1,8 @@
 import numpy as np
 import os
-import wandb 
-import traceback # <-- Import traceback
-
-# ---------------------------
-# Configuration
-# ---------------------------
-SCORE_DIR = "artifacts/scores"
-ALPHA_USED = 0.6 
+import argparse
+from torch.utils.tensorboard import SummaryWriter
+from src.config import ANALYSIS_LOG_DIR, SCORES_DIR
 
 # ---------------------------
 # EER and Curve Calculation Function
@@ -21,6 +16,7 @@ def calculate_curves_and_eer(genuine_scores, impostor_scores):
         frr = np.mean(genuine_scores < t)
         far_list.append(far)
         frr_list.append(frr)
+    
     far_list, frr_list = np.array(far_list), np.array(frr_list)
     diff = np.abs(far_list - frr_list)
     eer_index = np.argmin(diff)
@@ -29,128 +25,85 @@ def calculate_curves_and_eer(genuine_scores, impostor_scores):
     return eer, eer_threshold, far_list, frr_list, thresholds
 
 # ---------------------------
-# Helper logging function for system-specific plots
+# Helper logging function for individual metrics
 # ---------------------------
-def log_system_plots(system_name, genuine, impostor):
-    """Logs the histograms and ROC curve for a single system."""
-    print(f"--- Logging plots for: {system_name} System ---")
+def log_individual_metrics(writer, system_name, genuine, impostor, eer, threshold, hparams=None):
+    """Logs the histograms, scalars, and ROC curve for a single system."""
+    print(f"--- Logging metrics for: {system_name} ---")
+    print(f"EER: {eer:.3%}, Threshold: {threshold:.3f}\n")
     
-    wandb.log({
-        f'2_Score_Distributions/Genuine_Scores/{system_name}': wandb.Histogram(genuine),
-        f'2_Score_Distributions/Impostor_Scores/{system_name}': wandb.Histogram(impostor)
-    })
-
+    writer.add_histogram(f"{system_name}/Score_Dist/Genuine", genuine, 0)
+    writer.add_histogram(f"{system_name}/Score_Dist/Impostor", impostor, 0)
+    
+    metrics_dict = {'EER': eer, 'EER_Threshold': threshold}
+    writer.add_scalars(f"Performance_Summary/{system_name}", metrics_dict, 0)
+    
     labels = np.concatenate([np.ones_like(genuine), np.zeros_like(impostor)])
     predictions = np.concatenate([genuine, impostor])
     
+    # Downsample for PR Curve if dataset is too large
     if len(labels) > 200000:
         indices = np.random.choice(len(labels), 200000, replace=False)
         labels, predictions = labels[indices], predictions[indices]
     
-    # wandb.plot.roc_curve expects probabilities for each class
-    # We pass [P(impostor), P(genuine)] which is [1-score, score]
-    wandb.log({
-        f'4_ROC_Curves/GAR_vs_FAR/{system_name}': wandb.plot.roc_curve(
-            labels, 
-            np.stack([1-predictions, predictions], axis=1)
-            # Removed classes_to_plot argument to fix ValueError
-        )
-    })
+    writer.add_pr_curve(f'ROC_Curve/{system_name}', labels, predictions, global_step=0)
+    
+    if hparams:
+        flat_metrics = {f'hparam/{k}': v for k, v in metrics_dict.items()}
+        writer.add_hparams(hparams, flat_metrics)
 
 # ---------------------------
 # Main Execution
 # ---------------------------
 if __name__ == "__main__":
-    run_name = f"alpha_{ALPHA_USED}_final_analysis"
-    
-    # --- 1. Initialize W&B Run ---
+    parser = argparse.ArgumentParser(description="Analyze Fingerprint Scores")
+    parser.add_argument("--dataset", type=str, required=True, choices=["casia", "fvc2004"],
+                        help="The dataset to analyze (casia or fvc2004)")
+    parser.add_argument("--alpha", type=float, default=0.6, help="Alpha value used for protection")
+    args = parser.parse_args()
+
+    # Dynamic Path Setup
+    # Matches the format: {dataset}_{mode}_{type}.npy
+    score_prefix = f"{args.dataset}"
+    run_name = f"{args.dataset}_alpha_{args.alpha}"
+    writer = SummaryWriter(os.path.join(ANALYSIS_LOG_DIR, run_name))
+
+    print(f"Starting Analysis for Dataset: {args.dataset.upper()}")
+
+    # --- 1. Load score files dynamically ---
     try:
-        wandb.init(
-            project="Biometric_Analysis", 
-            name=run_name,
-            config={
-                "alpha": ALPHA_USED,
-                "score_dir": SCORE_DIR
-            }
-        )
-        print("--- W&B Init Succeeded. Starting analysis... ---")
-        
-    except Exception as e:
-        print(f"Error initializing wandb: {e}")
+        raw_gen = np.load(os.path.join(SCORES_DIR, f"{score_prefix}_raw_gen.npy"))
+        raw_imp = np.load(os.path.join(SCORES_DIR, f"{score_prefix}_raw_imp.npy"))
+        prot_gen = np.load(os.path.join(SCORES_DIR, f"{score_prefix}_prot_gen.npy"))
+        prot_imp = np.load(os.path.join(SCORES_DIR, f"{score_prefix}_prot_imp.npy"))
+    except FileNotFoundError as e:
+        print(f"Error: Could not find scores for {args.dataset}. Ensure you ran evaluation first.")
+        print(f"Details: {e}")
         exit()
 
+    # --- 2. Calculate curves ---
+    raw_eer, raw_thresh, raw_far, raw_frr, thresholds = calculate_curves_and_eer(raw_gen, raw_imp)
+    prot_eer, prot_thresh, prot_far, prot_frr, _ = calculate_curves_and_eer(prot_gen, prot_imp)
+
+    # --- 3. Log individual metrics ---
+    log_individual_metrics(writer, "Raw", raw_gen, raw_imp, raw_eer, raw_thresh)
     
-    # --- NEW: MASTER ERROR CATCHER ---
-    # This will catch ANY error during the main process
-    try:
-        # --- 2. Load all score files ---
-        print("--- Loading score files... ---")
-        raw_genuine = np.load(os.path.join(SCORE_DIR, "raw_genuine.npy"))
-        raw_impostor = np.load(os.path.join(SCORE_DIR, "raw_impostor.npy"))
-        prot_genuine = np.load(os.path.join(SCORE_DIR, "protected_genuine.npy"))
-        prot_impostor = np.load(os.path.join(SCORE_DIR, "protected_impostor.npy"))
-        print("--- Score files loaded successfully. ---")
+    hparams = {"dataset": args.dataset, "alpha": args.alpha, "protected": True}
+    log_individual_metrics(writer, "Protected", prot_gen, prot_imp, prot_eer, prot_thresh, hparams)
+    
+    # --- 4. Log Combined Comparison ---
+    print("--- Logging Comparison Curves ---")
+    for i, t in enumerate(thresholds):
+        writer.add_scalars(
+            'Comparison/FAR_vs_FRR', 
+            {
+                'FAR_Raw': raw_far[i],
+                'FRR_Raw': raw_frr[i],
+                'FAR_Prot': prot_far[i],
+                'FRR_Prot': prot_frr[i]
+            },
+            global_step=i
+        )
 
-        # --- 3. Calculate curves for both systems ---
-        print("--- Calculating EER and curves... ---")
-        raw_eer, raw_thresh, raw_far, raw_frr, thresholds = calculate_curves_and_eer(raw_genuine, raw_impostor)
-        prot_eer, prot_thresh, prot_far, prot_frr, _ = calculate_curves_and_eer(prot_genuine, prot_impostor)
-
-        # --- 4. Log System-Specific Plots (Histograms, ROC) ---
-        log_system_plots("Raw", raw_genuine, raw_impostor)
-        # !!! CRITICAL FIX HERE !!!
-        # Was: log_system_plots("Protected", prot_impostor, prot_impostor)
-        log_system_plots("Protected", prot_genuine, prot_impostor) 
-        
-        # --- 5. Log Performance Summary (EER & Threshold) ---
-        print("\n--- Logging Performance Summary to W&B Summary ---")
-        # wandb.summary is for metrics that summarize the *entire* run
-        wandb.summary["Raw_EER"] = raw_eer
-        wandb.summary["Raw_EER_Threshold"] = raw_thresh
-        wandb.summary["Protected_EER"] = prot_eer
-        wandb.summary["Protected_EER_Threshold"] = prot_thresh
-
-        # --- 6. Log the FAR/FRR plots as separate graphs ---
-        print("--- Logging separate FAR/FRR comparison plots ---")
-        
-        # --- 6a. Log Raw FAR/FRR plot ---
-        wandb.log({
-            "3_Error_Rate_Curves/FAR_vs_FRR_(Raw)": wandb.plot.line_series(
-                xs=thresholds,
-                ys=[raw_far, raw_frr],
-                keys=["FAR (Raw)", "FRR (Raw)"],
-                title="FAR/FRR vs. Decision Threshold (Raw System)",
-                xname="Threshold"
-            )
-        })
-        
-        # --- 6b. Log Protected FAR/FRR plot ---
-        wandb.log({
-            "3_Error_Rate_Curves/FAR_vs_FRR_(Protected)": wandb.plot.line_series(
-                xs=thresholds,
-                ys=[prot_far, prot_frr],
-                keys=["FAR (Protected)", "FRR (Protected)"],
-                title="FAR/FRR vs. Decision Threshold (Protected System)",
-                xname="Threshold"
-            )
-        })
-
-        # --- 7. Finish the run ---
-        wandb.finish() 
-        print("\nAnalysis complete. View results in Weights & Biases.")
-
-    except Exception as e:
-        # --- THIS WILL CATCH THE ERROR ---
-        print("\n" + "="*50)
-        print("!!! AN ERROR OCCURRED !!!")
-        print("="*50 + "\n")
-        print(f"Error Type: {type(e)}")
-        print(f"Error Details: {e}")
-        print("\nFull Traceback:")
-        traceback.print_exc() # Prints the full error traceback
-        
-        # Log the error to W&B before crashing
-        wandb.log({"error": str(e), "traceback": traceback.format_exc()})
-        wandb.finish(exit_code=1) # Finish the run with a non-zero exit code
-        print("\nScript terminated with an error. Error details logged to W&B.")
-
+    writer.close()
+    print(f"\nAnalysis complete. Run: tensorboard --logdir={ANALYSIS_LOG_DIR}")
