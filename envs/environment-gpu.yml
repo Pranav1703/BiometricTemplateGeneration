@@ -2,21 +2,26 @@ name: biometric-env
 channels:
   - pytorch
   - nvidia
-  - conda-forge 
+  - conda-forge
   - defaults
 dependencies:
   - python=3.10
-  - pytorch
-  - torchvision
-  - torchaudio
-  - pytorch-cuda=12.1
-  - numpy
-  - matplotlib
-  - scikit-learn
-  - opencv
-  - jupyterlab
-  - kagglehub
-  - tqdm
-  - pip
+  # GPU / ML Core (Locked to PyTorch/NVIDIA channels)
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch::torchaudio
+  - nvidia::pytorch-cuda=12.1
+  # Image & Computer Vision (Locked to Conda-Forge)
+  - conda-forge::opencv
+  - conda-forge::pillow
+  # Standard Data Science Stack
+  - conda-forge::numpy
+  - conda-forge::matplotlib
+  - conda-forge::scikit-learn
+  - conda-forge::tqdm
+  - conda-forge::jupyterlab
+  - conda-forge::kagglehub
+  # Package Managers
+  - conda-forge::pip
   - pip:
       - tensorboard

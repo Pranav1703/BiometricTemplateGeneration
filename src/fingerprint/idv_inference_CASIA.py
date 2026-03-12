@@ -19,9 +19,7 @@ backbone.load_state_dict(checkpoint["backbone"])
 backbone.eval()
 
 
-# ---------------------------
-# 2. Dynamic Projection Function
-# ---------------------------
+
 def generate_dynamic_projection(embedding: torch.Tensor, user_key: str, alpha: float = 0.5) -> torch.Tensor:
     # 1. Key-based random matrix (Directly on GPU)
     seed = int(hashlib.sha256(user_key.encode()).hexdigest(), 16) % (2**32)
@@ -43,9 +41,6 @@ def generate_dynamic_projection(embedding: torch.Tensor, user_key: str, alpha: f
     return R_dyn # stays on GPU
 
 
-# ---------------------------
-# 3. Embedding + Dynamic Protection
-# ---------------------------
 @torch.no_grad()
 def get_embeddings(img_path: str, user_key: str):
     # Load and preprocess
@@ -68,9 +63,9 @@ def get_embeddings(img_path: str, user_key: str):
 # ---------------------------
 if __name__ == "__main__":
     img1_path = "D:/code/Projects/biometric-template-gen/data/CASIA-dataset/000/L/000_L0_0.bmp"
-    img2_path = "D:/code/Projects/biometric-template-gen/data/CASIA-dataset/002/R/002_R1_4.bmp"
+    img2_path = "D:/code/Projects/biometric-template-gen/data/CASIA-dataset/000/L/000_L3_0.bmp"
     
-    # Each user/session can have a unique key
+
     user_key = "user_000_session_1"
 
     emb1_raw, emb1_protected = get_embeddings(img1_path, user_key)
@@ -82,5 +77,4 @@ if __name__ == "__main__":
     cos_sim_raw = F.cosine_similarity(emb1_raw.unsqueeze(0), emb2_raw.unsqueeze(0)).item()
     cos_sim_prot = F.cosine_similarity(emb1_protected.unsqueeze(0), emb2_protected.unsqueeze(0)).item()
 
-    # print(f"Raw cosine similarity between img1 and img2: {cos_sim_raw:.3f}")
     print(f"Protected cosine similarity img1 and img2: {cos_sim_prot:.3f}")
