@@ -8,7 +8,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # --- SPECIFIC IMPORTS ---
 # We alias them so we can switch between them easily
-from src.fingerprint.idv_inference_CASIA import get_embeddings as get_embeddings_casia
+from src.fingerprint.inference_CASIA_old import get_embeddings as get_embeddings_casia
 
 from src.fingerprint.idv_inference_FVC2004 import get_embeddings as get_embeddings_fvc
 
