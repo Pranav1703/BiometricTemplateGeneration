@@ -1,47 +1,137 @@
 import os
 import torch
+import argparse
+import numpy as np
+import hashlib
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.Dataset_Loader import FingerprintDataset
-from src.config import FINGERPRINT_VAL_CSV, SAVED_MODELS_DIR
-from src.fingerprint.train import FingerprintEmbeddingNet, EMBEDDING_DIM, DEVICE
+from src.config import SAVED_MODELS_DIR, SCORES_DIR
+from src.fingerprint.train import FingerprintEmbeddingNet, EMBEDDING_DIM, DEVICE, get_dataset_config
 
-Model_path = os.path.join(SAVED_MODELS_DIR, "fingerprint_arcface_model.pth")
+# ---------------------------
+# Bio-Hashing Functions
+# ---------------------------
+def get_chaotic_sequence(seed_str: str, length: int, r: float = 3.99) -> torch.Tensor:
+    """Generates a chaotic sequence based on a user key."""
+    hash_val = int(hashlib.sha256(seed_str.encode()).hexdigest(), 16)
+    x = (hash_val % 10**10) / 10**10 
+    
+    sequence = torch.zeros(length, device=DEVICE)
+    for i in range(length):
+        x = r * x * (1 - x)
+        sequence[i] = x
+    return sequence
 
-def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def generate_chaotic_projection(user_key: str) -> torch.Tensor:
+    """Generates an Orthogonal Projection Matrix (R) for a specific user."""
+    num_elements = EMBEDDING_DIM * EMBEDDING_DIM
+    chaotic_seq = get_chaotic_sequence(user_key, num_elements)
+    R_chaotic = chaotic_seq.view(EMBEDDING_DIM, EMBEDDING_DIM)
+    Q, _ = torch.linalg.qr(R_chaotic)
+    return Q 
 
-    # dataset & dataloader
-    test_dataset = FingerprintDataset(FINGERPRINT_VAL_CSV, train=False)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+def apply_bio_hash(projected_embedding: torch.Tensor) -> torch.Tensor:
+    """Binarizes the projected vector."""
+    return (projected_embedding > 0).float()
 
-    # load backbone
-    backbone = FingerprintEmbeddingNet(embedding_dim=EMBEDDING_DIM).to(device)
-    checkpoint = torch.load(Model_path, map_location=device)
+# ---------------------------
+# Main Execution
+# ---------------------------
+def main(dataset_name):
+    config = get_dataset_config(dataset_name)
+    model_path = os.path.join(SAVED_MODELS_DIR, config["model_name"])
+
+    print(f"Loading {dataset_name} validation dataset...")
+    val_dataset = FingerprintDataset(config["val_csv"], train=False, dataset_type=dataset_name)
+    val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False, num_workers=2)
+
+    # Load Backbone
+    backbone = FingerprintEmbeddingNet(embedding_dim=EMBEDDING_DIM).to(DEVICE)
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model checkpoint not found: {model_path}")
+    
+    checkpoint = torch.load(model_path, map_location=DEVICE, weights_only=True)
     backbone.load_state_dict(checkpoint["backbone"])
     backbone.eval()
 
-    all_embeddings = []
+    all_raw_embeddings = []
     all_labels = []
 
+    # 1. Extract Raw Embeddings
     with torch.no_grad():
-        for imgs, labels in tqdm(test_loader, desc="Extracting embeddings"):
-            imgs = imgs.to(device)
-            embeddings = backbone(imgs)
-            all_embeddings.append(embeddings.cpu())
-            all_labels.append(labels)
+        for imgs, labels in tqdm(val_loader, desc="Extracting Raw Features"):
+            imgs = imgs.to(DEVICE)
+            
+            # FIX: Unpack the tuple to get the quantized bits
+            quantized_bits, _ = backbone(imgs)
+            
+            all_raw_embeddings.append(quantized_bits.cpu())
+            all_labels.append(labels.cpu())
 
-    all_embeddings = torch.cat(all_embeddings, dim=0)
-    all_labels = torch.cat(all_labels, dim=0)
+    raw_embeddings = torch.cat(all_raw_embeddings, dim=0).to(DEVICE) # [N, 512]
+    labels = torch.cat(all_labels, dim=0).to(DEVICE) # [N]
 
-    os.makedirs("artifacts/embeddings", exist_ok=True)
-    torch.save({
-        "embeddings": all_embeddings,
-        "labels": all_labels
-    }, "artifacts/embeddings/test_embeddings.pt")
+    # 2. Apply Bio-Hashing (Dynamic Projection)
+    print("Applying Bio-Hashing Projection...")
+    unique_labels = torch.unique(labels)
+    user_matrices = {}
+    
+    # Pre-generate the chaotic matrices for each unique identity
+    for label in unique_labels:
+        user_key = f"{dataset_name}_user_{label.item()}_secret_key"
+        user_matrices[label.item()] = generate_chaotic_projection(user_key)
 
-    print("Saved embeddings to artifacts/embeddings/test_embeddings.pt")
+    prot_embeddings = torch.zeros_like(raw_embeddings)
+    
+    for i in tqdm(range(len(labels)), desc="Projecting Templates"):
+        lbl = labels[i].item()
+        R_matrix = user_matrices[lbl]
+        
+        # Project and Hash
+        projected = torch.matmul(R_matrix, raw_embeddings[i])
+        prot_embeddings[i] = apply_bio_hash(projected)
+
+    # 3. Compute Pairwise Scores (RAM-Safe Matrix Math)
+    print("Computing millions of pairwise comparisons...")
+    
+    # Raw = Cosine Similarity
+    raw_embeddings_norm = torch.nn.functional.normalize(raw_embeddings, p=2, dim=1)
+    raw_sim_matrix = torch.matmul(raw_embeddings_norm, raw_embeddings_norm.T)
+
+    # Protected = Hamming Similarity (Vectorized to avoid Out-Of-Memory errors)
+    matches = torch.matmul(prot_embeddings, prot_embeddings.T) + torch.matmul(1 - prot_embeddings, 1 - prot_embeddings.T)
+    prot_sim_matrix = matches / EMBEDDING_DIM
+
+    # 4. Extract Genuine and Impostor Scores
+    label_matrix = labels.unsqueeze(1) == labels.unsqueeze(0)
+    
+    # Remove the diagonal (don't compare an image to itself)
+    label_matrix.fill_diagonal_(False)
+    imp_mask = ~label_matrix
+    imp_mask.fill_diagonal_(False)
+
+    raw_gen = raw_sim_matrix[label_matrix].cpu().numpy()
+    raw_imp = raw_sim_matrix[imp_mask].cpu().numpy()
+    
+    prot_gen = prot_sim_matrix[label_matrix].cpu().numpy()
+    prot_imp = prot_sim_matrix[imp_mask].cpu().numpy()
+
+    # 5. Save Score Arrays
+    os.makedirs(SCORES_DIR, exist_ok=True)
+    prefix = os.path.join(SCORES_DIR, dataset_name)
+    
+    np.save(f"{prefix}_raw_gen.npy", raw_gen)
+    np.save(f"{prefix}_raw_imp.npy", raw_imp)
+    np.save(f"{prefix}_prot_gen.npy", prot_gen)
+    np.save(f"{prefix}_prot_imp.npy", prot_imp)
+
+    print(f"Success! Saved scores to {SCORES_DIR}")
+    print(f"Genuine Pairs: {len(raw_gen):,} | Impostor Pairs: {len(raw_imp):,}")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Generate Embeddings & Bio-Hash Scores")
+    parser.add_argument("--dataset", type=str, required=True, choices=["casia", "fvc2000", "fvc2004"])
+    args = parser.parse_args()
+    main(args.dataset)
