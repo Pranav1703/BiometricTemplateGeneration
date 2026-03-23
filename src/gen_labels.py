@@ -108,46 +108,29 @@ def scan_fvc2004_root(root: Path) -> List[Tuple[str, str]]:
 # --------------------------
 # CASIA Dataset Functions
 # --------------------------
-def extract_casia_person_id(folder_name: str) -> str:
+def extract_casia_finger_id(filepath: Path) -> str:
     """
-    Extracts person ID from CASIA folder name.
-    Folder format: 000, 001, 002, etc.
+    Extracts unique finger ID from CASIA filename.
+    Format: XXX_H#_@.bmp (e.g., '000_L0_0.bmp')
+    Returns: '000_L0'
     """
-    m = re.match(r"(\d+)", folder_name)
-    return m.group(1) if m else folder_name
-
-
-def gather_images_from_dir(dirpath: Path) -> List[Path]:
-    """Recursively gather allowed image files from directory."""
-    rows = []
-    if not dirpath or not dirpath.exists():
-        return rows
-    for p in dirpath.rglob("*"):
-        if p.is_file() and p.suffix.lower() in ALLOWED_EXT:
-            rows.append(p.resolve())
-    return rows
-
+    # Regex to grab the PersonID_HandFinger combo
+    m = re.search(r'(\d+_[a-zA-Z]\d+)', filepath.name)
+    if m:
+        return m.group(1).upper()
+    
+    # Fallback just in case folder structure is used instead of standard filenames
+    return f"{filepath.parent.parent.name}_{filepath.parent.name}"
 
 def scan_casia_root(root: Path) -> List[Tuple[str, str]]:
-    """
-    Scans nested directory structure for CASIA images.
-    Expected structure: root/001/Fingerprint/*.bmp, root/001/*/*.bmp
-    """
+    """Scans for CASIA images and treats each distinct finger as a class."""
     fingerprint_rows = []
-
-    for person_dir in sorted(root.iterdir()):
-        if not person_dir.is_dir():
-            continue
-
-        person_id = extract_casia_person_id(person_dir.name)
-
-        # Scan subdirectories (L, R, or direct images)
-        for sub in person_dir.iterdir():
-            if sub.is_dir():
-                images = gather_images_from_dir(sub)
-                fingerprint_rows += [(str(p), person_id) for p in images]
-            elif sub.is_file() and sub.suffix.lower() in ALLOWED_EXT:
-                fingerprint_rows.append((str(sub), person_id))
+    
+    # Recursively find all allowed images
+    for p in root.rglob("*"):
+        if p.is_file() and p.suffix.lower() in ALLOWED_EXT:
+            finger_id = extract_casia_finger_id(p)
+            fingerprint_rows.append((str(p.resolve()), finger_id))
 
     return fingerprint_rows
 

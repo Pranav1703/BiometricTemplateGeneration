@@ -290,29 +290,35 @@ DATASET_CONFIG = {
     "casia": {
         "train_csv": CASIA_TRAIN_CSV,
         "val_csv": CASIA_VAL_CSV,
-        "batch_size": 64,
-        "epochs": 50,
+        "batch_size": 128, #64 or 128 is good
+        "epochs": 100,
         "learning_rate": 1e-4,
         "num_classes": None,  # Will be auto-detected
-        "model_name": "casia_arcface_model.pth",
+        "model_name": "casia_arcface_model_quantized_100_128bs.pth",
+        "p_classes": 32,  # 32 classes * 4 imgs = Batch size 128
+        "k_samples": 4,
     },
     "fvc2000": {
         "train_csv": FVC2000_TRAIN_CSV,
         "val_csv": FVC2000_VAL_CSV,
         "batch_size": 32,
-        "epochs": 50,
+        "epochs": 150,
         "learning_rate": 1e-4,
-        "num_classes": 100,  # FVC2000 has 100 fingers
-        "model_name": "fvc2000_arcface_model.pth",
+        "num_classes": None,  # FVC2000 has 100 fingers
+        "model_name": "fvc2000_arcface_model_quantized_150.pth",
+        "p_classes": 8,  # 32 classes * 4 imgs = Batch size 128
+        "k_samples": 4,
     },
     "fvc2004": {
         "train_csv": FVC2004_TRAIN_CSV,
         "val_csv": FVC2004_VAL_CSV,
         "batch_size": 32,
-        "epochs": 50,
+        "epochs": 150,
         "learning_rate": 1e-4,
-        "num_classes": 100,  # FVC2004 has 100 fingers
-        "model_name": "fvc2004_arcface_model.pth",
+        "num_classes": None,  # FVC2004 has 100 fingers
+        "model_name": "fvc2004_arcface_model_quantized_150.pth",
+        "p_classes": 8,  # 32 classes * 4 imgs = Batch size 128
+        "k_samples": 4,
     },
 }
 
@@ -354,7 +360,12 @@ def train(dataset_name, resume_from=None):
     # Create dataloaders
     # Use P=16, K=4 for a Batch Size of 64
     # Use P=32, K=4 for a Batch Size of 128 (Try this first on the 3060)
-    pk_sampler = PKSampler(train_dataset, p_classes=32, k_samples=4)
+    # # Create dataloaders dynamically based on dataset config
+    pk_sampler = PKSampler(
+        train_dataset, 
+        p_classes=config.get("p_classes", 16), 
+        k_samples=config.get("k_samples", 4)
+    )
 
     train_loader = DataLoader(
         train_dataset, 
@@ -370,7 +381,7 @@ def train(dataset_name, resume_from=None):
     logger.info(
         f"Training samples: {len(train_dataset)}, Validation samples: {len(val_dataset)}"
     )
-    logger.info(f"Number of Classes: {config['num_classes']}")
+    logger.info(f"Number of Classes: {config['num_classes']}, pk_sampler -> p_classes : {config.get('p_classes', 16)}, k_samples : {config.get('k_samples', 4)}")
     
     # Initialize model
     backbone = FingerprintEmbeddingNet(EMBEDDING_DIM).to(DEVICE)
@@ -411,7 +422,7 @@ def train(dataset_name, resume_from=None):
     best_val_ber = float("inf")
 
     # Initialize Mixed Precision Scaler
-    scaler = torch.amp.GradScaler('cuda')
+    scaler = torch.cuda.amp.GradScaler()
 
     # Training loop
     for epoch in range(start_epoch, config["epochs"] + 1):
@@ -451,7 +462,7 @@ def train(dataset_name, resume_from=None):
         )
 
         # 5. Strategic Refinement: Save on Lowest BER or Lowest Val Loss
-        is_best_ber = (val_ber != float('inf') and val_ber < best_val_ber)
+        is_best_ber = (val_ber != float('inf') and val_ber < best_val_ber and epoch > 10 )
         is_best_loss = (val_loss < best_val_loss)
 
         if is_best_loss or is_best_ber:
