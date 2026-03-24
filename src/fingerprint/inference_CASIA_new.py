@@ -14,7 +14,7 @@ EMBEDDING_DIM = 512
 # ---------------------------
 # 1. Load trained backbone
 # ---------------------------
-MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "fingerprint_arcface_model.pth")
+MODEL_PATH = os.path.join(SAVED_MODELS_DIR, "casia_arcface_model_quantized_100_128bs.pth")
 backbone = FingerprintEmbeddingNet(embedding_dim=EMBEDDING_DIM).to(DEVICE)
 checkpoint = torch.load(MODEL_PATH, map_location=DEVICE,  weights_only=True)
 backbone.load_state_dict(checkpoint["backbone"])
@@ -72,7 +72,10 @@ def calculate_hamming_similarity(template1: torch.Tensor, template2: torch.Tenso
 def get_protected_template(img_path: str, user_key: str, R_fixed: torch.Tensor):
     # 1. Feature Extraction
     img_tensor = preprocess_fingerprint(img_path, train=False).unsqueeze(0).to(DEVICE)
-    embedding = backbone(img_tensor).squeeze(0) 
+    
+    # THE FIX: Unpack the tuple! We only need the quantized_bits for inference.
+    quantized_bits, _ = backbone(img_tensor)
+    embedding = quantized_bits.squeeze(0) 
 
     # 2. Dynamic Projection using the passed R_fixed
     # Ensure R_fixed is on the same device as embedding
@@ -86,8 +89,8 @@ def get_protected_template(img_path: str, user_key: str, R_fixed: torch.Tensor):
 
 # Optimized Workflow
 if __name__ == "__main__":
-    img1_path = "D:/code/Projects/biometric-template-gen/data/CASIA-dataset/000/L/000_L0_0.bmp"
-    img2_path = "D:/code/Projects/biometric-template-gen/data/CASIA-dataset/000/L/000_L0_0.bmp"
+    img1_path = "datasets/CASIA-dataset/000/L/000_L0_4.bmp"
+    img2_path = "datasets/CASIA-dataset/000/L/000_L0_4.bmp"
     user_key = "user_000_session_1"
 
     # 1. PRE-GENERATE R (Do this once per user/session)
@@ -97,7 +100,9 @@ if __name__ == "__main__":
     # 2. Get Templates
     # (Update get_protected_template to accept R_fixed instead of generating it inside)
     emb1_raw, emb1_prot = get_protected_template(img1_path, user_key, R_fixed)
-    emb2_raw, emb2_prot = get_protected_template(img2_path, user_key, R_fixed)
+
+    R_attacker = generate_chaotic_projection(None, "hacker_key_999") 
+    emb2_raw, emb2_prot = get_protected_template(img2_path, user_key, R_attacker)
 
     # 3. Compare using Hamming Similarity
     hamming_sim = calculate_hamming_similarity(emb1_prot, emb2_prot)

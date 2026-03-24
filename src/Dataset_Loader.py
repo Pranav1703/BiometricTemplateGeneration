@@ -66,51 +66,42 @@ class FingerprintDataset(Dataset):
                 return "unknown"
 
     def _load_samples(self):
-        """Load samples from CSV file."""
+        """Load samples from CSV file with safe string-to-int mapping."""
         if not os.path.exists(self.csv_file):
             raise FileNotFoundError(f"CSV file not found: {self.csv_file}")
 
         with open(self.csv_file, newline="") as f:
             reader = csv.DictReader(f)
-
-            # Detect column names (handle variations)
             fieldnames = reader.fieldnames or []
 
-            # Map possible column names
-            filepath_col = self._get_column_name(
-                fieldnames, ["filepath", "file_path", "path", "image_path"]
-            )
-            person_id_col = self._get_column_name(
-                fieldnames, ["person_id", "label", "id", "class", "subject_id"]
-            )
+            filepath_col = self._get_column_name(fieldnames, ["filepath", "file_path", "path", "image_path"])
+            person_id_col = self._get_column_name(fieldnames, ["person_id", "label", "id", "class", "subject_id"])
 
-            if not filepath_col:
-                raise ValueError(
-                    f"Could not find filepath column in {self.csv_file}. Available columns: {fieldnames}"
-                )
-            if not person_id_col:
-                raise ValueError(
-                    f"Could not find person_id column in {self.csv_file}. Available columns: {fieldnames}"
-                )
+            if not filepath_col or not person_id_col:
+                raise ValueError(f"Missing required columns in {self.csv_file}")
+
+            # 1. Gather raw data and unique IDs
+            raw_samples = []
+            unique_ids = set()
 
             for row in reader:
                 filepath = row[filepath_col]
+                raw_id = row[person_id_col]  # Keep it as a string (e.g., "000_L0")
+                raw_samples.append((filepath, raw_id))
+                unique_ids.add(raw_id)
 
-                # Handle person_id based on dataset type
-                if self.dataset_type == "fvc2000":
-                    # FVC IDs are 1..100, map to 0..99
-                    pid = int(row[person_id_col])
-                    label_idx = pid - 1
-                else:
-                    # CASIA and others: assume IDs are already 0-indexed or sequential
-                    pid = int(row[person_id_col])
-                    label_idx = pid
+            # 2. Map unique string IDs to a continuous 0-indexed integer scale
+            sorted_ids = sorted(list(unique_ids))
+            self.id_to_idx = {raw_id: idx for idx, raw_id in enumerate(sorted_ids)}
 
-                self.samples.append((filepath, label_idx))
+            # 3. Apply the mapping
+            for filepath, raw_id in raw_samples:
+                safe_label_idx = self.id_to_idx[raw_id]
+                self.samples.append((filepath, safe_label_idx))
 
         if len(self.samples) == 0:
             raise ValueError(f"No samples loaded from {self.csv_file}")
-
+        
     def _get_column_name(self, fieldnames: list, possible_names: list) -> Optional[str]:
         """Find matching column name from possible options."""
         for name in possible_names:
