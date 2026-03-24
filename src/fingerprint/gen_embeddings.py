@@ -99,10 +99,30 @@ def main(dataset_name):
     for i in tqdm(range(len(labels)), desc="Projecting Templates"):
         lbl = labels[i].item()
         R_matrix = user_matrices[lbl]
-        
-        # Project and Hash
         projected = torch.matmul(R_matrix, raw_embeddings[i])
         prot_embeddings[i] = apply_bio_hash(projected)
+
+    # ==========================================
+    # NEW: 2.5 The Stolen Token Scenario
+    # ==========================================
+    print("Simulating Stolen Token (Hacker) Scenario...")
+    stolen_prot_embeddings = torch.zeros_like(raw_embeddings)
+    
+    # We force EVERY fingerprint to be projected using User 0's Key
+    stolen_hacker_matrix = user_matrices[unique_labels[0].item()]
+    
+    for i in range(len(labels)):
+        projected = torch.matmul(stolen_hacker_matrix, raw_embeddings[i])
+        stolen_prot_embeddings[i] = apply_bio_hash(projected)
+
+    # Calculate Stolen Scores
+    stolen_matches = torch.matmul(stolen_prot_embeddings, stolen_prot_embeddings.T) + torch.matmul(1 - stolen_prot_embeddings, 1 - stolen_prot_embeddings.T)
+    stolen_sim_matrix = stolen_matches / EMBEDDING_DIM
+    
+    # We only care about the impostor scores here (Hacker vs Victim)
+    stolen_imp = stolen_sim_matrix[imp_mask].cpu().numpy()
+    np.save(f"{prefix}_stolen_imp.npy", stolen_imp)
+    # ==========================================
 
     # 3. Compute Pairwise Scores (RAM-Safe Matrix Math)
     print("Computing millions of pairwise comparisons...")
