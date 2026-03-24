@@ -24,11 +24,22 @@ def get_chaotic_sequence(seed_str: str, length: int, r: float = 3.99) -> torch.T
         sequence[i] = x
     return sequence
 
+# ---------------------------
+# Bio-Hashing Functions
+# ---------------------------
 def generate_chaotic_projection(user_key: str) -> torch.Tensor:
-    """Generates an Orthogonal Projection Matrix (R) for a specific user."""
-    num_elements = EMBEDDING_DIM * EMBEDDING_DIM
-    chaotic_seq = get_chaotic_sequence(user_key, num_elements)
-    R_chaotic = chaotic_seq.view(EMBEDDING_DIM, EMBEDDING_DIM)
+    """Generates an Orthogonal Projection Matrix (R) instantly on the GPU."""
+    # 1. Map string key to a deterministic seed integer
+    seed_val = int(hashlib.sha256(user_key.encode()).hexdigest(), 16) % (2**32)
+    
+    # 2. Seed a PyTorch generator (keeps it isolated from global random state)
+    gen = torch.Generator(device=DEVICE)
+    gen.manual_seed(seed_val)
+    
+    # 3. Generate the entire matrix instantly in C++/CUDA
+    R_chaotic = torch.randn((EMBEDDING_DIM, EMBEDDING_DIM), generator=gen, device=DEVICE)
+    
+    # 4. Orthonormalize using QR decomposition
     Q, _ = torch.linalg.qr(R_chaotic)
     return Q 
 
@@ -74,12 +85,12 @@ def main(dataset_name):
     labels = torch.cat(all_labels, dim=0).to(DEVICE) # [N]
 
     # 2. Apply Bio-Hashing (Dynamic Projection)
-    print("Applying Bio-Hashing Projection...")
+    print("Pre-generating Bio-Hashing matrices...")
     unique_labels = torch.unique(labels)
     user_matrices = {}
     
-    # Pre-generate the chaotic matrices for each unique identity
-    for label in unique_labels:
+    # Pre-generate the chaotic matrices for each unique identity WITH A LOADING BAR
+    for label in tqdm(unique_labels, desc="Generating User Keys"):
         user_key = f"{dataset_name}_user_{label.item()}_secret_key"
         user_matrices[label.item()] = generate_chaotic_projection(user_key)
 
