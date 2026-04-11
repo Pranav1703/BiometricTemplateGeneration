@@ -25,6 +25,8 @@ from src.config import (
     FVC2000_VAL_CSV,
     FVC2004_TRAIN_CSV,
     FVC2004_VAL_CSV,
+    CMBD_TRAIN_CSV,
+    CMBD_VAL_CSV,
     SAVED_MODELS_DIR,
     TENSORBOARD_DIR,
 )
@@ -320,6 +322,17 @@ DATASET_CONFIG = {
         "p_classes": 8,  # 32 classes * 4 imgs = Batch size 128
         "k_samples": 4,
     },
+    "cmbd": {                                      # <-- ADD THIS BLOCK
+        "train_csv": CMBD_TRAIN_CSV,
+        "val_csv": CMBD_VAL_CSV,
+        "batch_size": 64,                          # For Val Loader
+        "epochs": 100,
+        "learning_rate": 1e-4,
+        "num_classes": None,                        # 104 Folders
+        "model_name": "cmbd_arcface_model_quantized.pth",
+        "p_classes": 16,                           # 16 classes per batch
+        "k_samples": 4,                            # 4 images per class
+    },
 }
 
 
@@ -513,7 +526,7 @@ Examples:
         "--dataset",
         type=str,
         required=True,
-        choices=["casia", "fvc2000", "fvc2004"],
+        choices=["casia", "fvc2000", "fvc2004", "cmbd"],
         help="Dataset to train on (casia or fvc2000)",
     )
 

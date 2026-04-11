@@ -50,7 +50,7 @@ def log_individual_metrics(writer, system_name, genuine, impostor, eer, threshol
     
     writer.add_pr_curve(f'Precision_Recall_Curve/{system_name}', labels, predictions, global_step=0)
 
-def save_overlapping_histogram(genuine, impostor, system_name, eer, threshold):
+def save_overlapping_histogram(genuine, impostor, system_name, eer, threshold, dataset_name):
     """Generates and saves a presentation-ready overlapping distribution graph."""
     plt.figure(figsize=(10, 6))
     
@@ -61,7 +61,7 @@ def save_overlapping_histogram(genuine, impostor, system_name, eer, threshold):
     # Add a vertical dashed line where your EER threshold is
     plt.axvline(x=threshold, color='black', linestyle='--', linewidth=2, label=f'EER Threshold ({threshold:.2f})')
     
-    plt.title(f'Score Distribution: {system_name}\nEER = {eer:.2%}', fontsize=14)
+    plt.title(f'Score Distribution: {dataset_name.upper()} - {system_name}\nEER = {eer:.2%}', fontsize=14)
     plt.xlabel('Similarity Score (0.0 to 1.0)', fontsize=12)
     plt.ylabel('Density', fontsize=12)
     plt.legend(loc='upper center')
@@ -69,16 +69,16 @@ def save_overlapping_histogram(genuine, impostor, system_name, eer, threshold):
     
     # Save the plot
     os.makedirs("artifacts/plots", exist_ok=True)
-    plt.savefig(f"artifacts/plots/{system_name}_Distribution.png", dpi=300, bbox_inches='tight')
+    filename = f"artifacts/plots/{dataset_name}_{system_name}_Distribution.png"
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
-    print(f"Saved overlapping graph to artifacts/plots/{system_name}_Distribution.png")
-
+    print(f"Saved overlapping graph to {filename}")
 # ---------------------------
 # Main Execution
 # ---------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze Fingerprint Scores")
-    parser.add_argument("--dataset", type=str, required=True, choices=["casia", "fvc2000", "fvc2004"],
+    parser.add_argument("--dataset", type=str, required=True, choices=["casia", "fvc2000", "fvc2004", "cmbd"],
                         help="The dataset to analyze (casia, fvc2000, or fvc2004)")
     args = parser.parse_args()
 
@@ -112,14 +112,14 @@ if __name__ == "__main__":
 
     # --- 3. Log individual metrics ---
     log_individual_metrics(writer, "1_Raw_Backbone", raw_gen, raw_imp, raw_eer, raw_thresh)
-    save_overlapping_histogram(raw_gen, raw_imp, "1_Raw_Backbone", raw_eer, raw_thresh)
+    save_overlapping_histogram(raw_gen, raw_imp, "1_Raw_Backbone", raw_eer, raw_thresh, args.dataset)
     
     log_individual_metrics(writer, "2_Bio_Hashed_Normal", prot_gen, prot_imp, prot_eer, prot_thresh)
-    save_overlapping_histogram(prot_gen, prot_imp, "2_Bio_Hashed_Normal", prot_eer, prot_thresh)
+    save_overlapping_histogram(prot_gen, prot_imp, "2_Bio_Hashed_Normal", prot_eer, prot_thresh, args.dataset)
     
     # NEW: Log Stolen Scenario
     log_individual_metrics(writer, "3_Bio_Hashed_Stolen_Key", prot_gen, stolen_imp, stolen_eer, stolen_thresh)
-    save_overlapping_histogram(prot_gen, stolen_imp, "3_Bio_Hashed_Stolen_Key", stolen_eer, stolen_thresh)
+    save_overlapping_histogram(prot_gen, stolen_imp, "3_Bio_Hashed_Stolen_Key", stolen_eer, stolen_thresh, args.dataset)
     
     # --- 4. Log Combined Comparison ---
     print("--- Logging Comparison Curves ---")

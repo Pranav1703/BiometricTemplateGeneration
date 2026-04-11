@@ -62,6 +62,8 @@ class FingerprintDataset(Dataset):
                 return "casia"
             elif os.path.exists(FVC2000_DIR) and FVC2000_DIR in csv_file:
                 return "fvc2000"
+            elif "cmbd" in csv_path_lower: # <-- ADD THIS
+                        return "cmbd"          # <-- ADD THIS
             else:
                 return "unknown"
 

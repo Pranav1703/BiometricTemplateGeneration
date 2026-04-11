@@ -55,8 +55,8 @@ def main(dataset_name):
     config = get_dataset_config(dataset_name)
     model_path = os.path.join(SAVED_MODELS_DIR, config["model_name"])
 
-    print(f"Loading {dataset_name} validation dataset...")
-    val_dataset = FingerprintDataset(config["val_csv"], train=False, dataset_type=dataset_name)
+    print(f"Loading {dataset_name} dataset for evaluation...")
+    val_dataset = FingerprintDataset(config["train_csv"], train=False, dataset_type=dataset_name)
     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False, num_workers=2)
 
     # Load Backbone
@@ -165,6 +165,6 @@ def main(dataset_name):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate Embeddings & Bio-Hash Scores")
-    parser.add_argument("--dataset", type=str, required=True, choices=["casia", "fvc2000", "fvc2004"])
+    parser.add_argument("--dataset", type=str, required=True, choices=["casia", "fvc2000", "fvc2004", "cmbd"])
     args = parser.parse_args()
     main(args.dataset)
