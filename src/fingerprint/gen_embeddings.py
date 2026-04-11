@@ -44,8 +44,9 @@ def generate_chaotic_projection(user_key: str) -> torch.Tensor:
     return Q 
 
 def apply_bio_hash(projected_embedding: torch.Tensor) -> torch.Tensor:
-    """Binarizes the projected vector."""
-    return (projected_embedding > 0).float()
+    # Use median to ensure 50% probability for each bit
+    t = torch.median(projected_embedding)
+    return (projected_embedding >= t).float()
 
 # ---------------------------
 # Main Execution
@@ -54,8 +55,8 @@ def main(dataset_name):
     config = get_dataset_config(dataset_name)
     model_path = os.path.join(SAVED_MODELS_DIR, config["model_name"])
 
-    print(f"Loading {dataset_name} validation dataset...")
-    val_dataset = FingerprintDataset(config["val_csv"], train=False, dataset_type=dataset_name)
+    print(f"Loading {dataset_name} dataset for evaluation...")
+    val_dataset = FingerprintDataset(config["train_csv"], train=False, dataset_type=dataset_name)
     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False, num_workers=2)
 
     # Load Backbone
@@ -99,10 +100,10 @@ def main(dataset_name):
     for i in tqdm(range(len(labels)), desc="Projecting Templates"):
         lbl = labels[i].item()
         R_matrix = user_matrices[lbl]
-        
-        # Project and Hash
         projected = torch.matmul(R_matrix, raw_embeddings[i])
         prot_embeddings[i] = apply_bio_hash(projected)
+    
+    # ==========================================
 
     # 3. Compute Pairwise Scores (RAM-Safe Matrix Math)
     print("Computing millions of pairwise comparisons...")
@@ -129,6 +130,26 @@ def main(dataset_name):
     prot_gen = prot_sim_matrix[label_matrix].cpu().numpy()
     prot_imp = prot_sim_matrix[imp_mask].cpu().numpy()
 
+        # ==========================================
+    # NEW: 2.5 The Stolen Token Scenario
+    # ==========================================
+    print("Simulating Stolen Token (Hacker) Scenario...")
+    stolen_prot_embeddings = torch.zeros_like(raw_embeddings)
+    
+    # We force EVERY fingerprint to be projected using User 0's Key
+    stolen_hacker_matrix = user_matrices[unique_labels[0].item()]
+    
+    for i in range(len(labels)):
+        projected = torch.matmul(stolen_hacker_matrix, raw_embeddings[i])
+        stolen_prot_embeddings[i] = apply_bio_hash(projected)
+
+    # Calculate Stolen Scores
+    stolen_matches = torch.matmul(stolen_prot_embeddings, stolen_prot_embeddings.T) + torch.matmul(1 - stolen_prot_embeddings, 1 - stolen_prot_embeddings.T)
+    stolen_sim_matrix = stolen_matches / EMBEDDING_DIM
+    
+    # We only care about the impostor scores here (Hacker vs Victim)
+    stolen_imp = stolen_sim_matrix[imp_mask].cpu().numpy()
+
     # 5. Save Score Arrays
     os.makedirs(SCORES_DIR, exist_ok=True)
     prefix = os.path.join(SCORES_DIR, dataset_name)
@@ -137,12 +158,13 @@ def main(dataset_name):
     np.save(f"{prefix}_raw_imp.npy", raw_imp)
     np.save(f"{prefix}_prot_gen.npy", prot_gen)
     np.save(f"{prefix}_prot_imp.npy", prot_imp)
+    np.save(f"{prefix}_stolen_imp.npy", stolen_imp)
 
     print(f"Success! Saved scores to {SCORES_DIR}")
     print(f"Genuine Pairs: {len(raw_gen):,} | Impostor Pairs: {len(raw_imp):,}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate Embeddings & Bio-Hash Scores")
-    parser.add_argument("--dataset", type=str, required=True, choices=["casia", "fvc2000", "fvc2004"])
+    parser.add_argument("--dataset", type=str, required=True, choices=["casia", "fvc2000", "fvc2004", "cmbd"])
     args = parser.parse_args()
     main(args.dataset)

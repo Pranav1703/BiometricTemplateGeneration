@@ -26,6 +26,12 @@ DATASET_CONFIGS = {
         "clahe_grid_size": (8, 8),
         "normalization": "imagenet",
     },
+    "cmbd": {                          # <-- ADD THIS BLOCK
+            "use_clahe": True,
+            "clahe_clip_limit": 2.0,
+            "clahe_grid_size": (8, 8),
+            "normalization": "imagenet",
+        },
     "default": {
         "use_clahe": True,
         "clahe_clip_limit": 2.0,
