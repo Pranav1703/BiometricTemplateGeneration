@@ -1,6 +1,6 @@
 # Biometric Template Generation
 
-A fingerprint recognition system using deep learning (ResNet50 + ArcFace) for feature extraction. Supports multiple datasets (CASIA, FVC2000) with cancelable biometric techniques for privacy-preserving template protection.
+A fingerprint recognition system using deep learning (ResNet50 + ArcFace) for feature extraction. Supports multiple datasets (CASIA, FVC2000, FVC2004, CMBD) with cancelable biometric techniques for privacy-preserving template protection.
 
 ## Quick Start
 
@@ -24,6 +24,11 @@ pip install pytest gdown
 - **Website**: http://bias.csr.unibo.it/fvc2000/download.asp
 - **Direct Download**: https://static-content.springer.com/esm/chp%3A10.1007%2F978-3-030-83624-5_4/MediaObjects/74034_3_En_4_MOESM1_ESM.zip
 - Extract to: `datasets/FVC2000/DB1_a/`
+
+#### FVC2004 Dataset
+- **Website**: http://bias.csr.unibo.it/fvc2004/download.asp
+- **Direct Download**: https://static-content.springer.com/esm/chp%3A10.1007%2F978-3-030-83624-5_4/MediaObjects/74034_3_En_4_MOESM1_ESM.zip
+- Extract to: `datasets/FVC2004/DB1_A/`
 
 #### CASIA Dataset
 - **Drive**: https://drive.google.com/drive/folders/1yFb8jmAO72nIamSHVKkXtmCY5I52iRCX?usp=sharing
