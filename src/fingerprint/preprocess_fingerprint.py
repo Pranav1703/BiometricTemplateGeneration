@@ -1,6 +1,6 @@
 """
 Unified Preprocessing Module for Fingerprint Images
-Supports: CASIA and FVC2000 datasets
+Supports: CASIA, FVC200, FVC204 and CMBD datasets
 """
 
 import os

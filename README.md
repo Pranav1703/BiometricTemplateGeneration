@@ -1,6 +1,6 @@
 # Biometric Template Generation
 
-A fingerprint recognition system using deep learning (ResNet50 + ArcFace) for feature extraction. Supports multiple datasets (CASIA, FVC2000) with cancelable biometric techniques for privacy-preserving template protection.
+A fingerprint recognition system using deep learning (ResNet50 + ArcFace) for feature extraction. Supports multiple datasets (CASIA, FVC2000, FVC2004, CMBD) with cancelable biometric techniques for privacy-preserving template protection.
 
 ## Quick Start
 
@@ -25,6 +25,11 @@ pip install pytest gdown
 - **Direct Download**: https://static-content.springer.com/esm/chp%3A10.1007%2F978-3-030-83624-5_4/MediaObjects/74034_3_En_4_MOESM1_ESM.zip
 - Extract to: `datasets/FVC2000/DB1_a/`
 
+#### FVC2004 Dataset
+- **Website**: http://bias.csr.unibo.it/fvc2004/download.asp
+- **Direct Download**: https://static-content.springer.com/esm/chp%3A10.1007%2F978-3-030-83624-5_4/MediaObjects/74034_3_En_4_MOESM1_ESM.zip
+- Extract to: `datasets/FVC2004/DB1_A/`
+
 #### CASIA Dataset
 - **Drive**: https://drive.google.com/drive/folders/1yFb8jmAO72nIamSHVKkXtmCY5I52iRCX?usp=sharing
 - Extract to: `datasets/CASIA-dataset/`
@@ -40,10 +45,10 @@ python -m src.config
 
 ```bash
 # Generate FVC2000 labels
-python -m src.utils.gen_labels --dataset fvc2000
+python -m src.gen_labels --dataset fvc2000
 
 # Generate CASIA labels
-python -m src.utils.gen_labels --dataset casia
+python -m src.gen_labels --dataset casia
 ```
 
 ### 5. Train Model
@@ -93,28 +98,32 @@ BiometricTemplateGeneration/
 │   └── logs/                  # Training logs
 ├── src/                       # Source code
 │   ├── config.py              # Configuration & auto-folder creation
+│   ├── gen_labels.py          # Label generation script
+│   ├── model_downloader.py    # Model download utility
+│   ├── Dataset_Loader.py     # Dataset loading utilities
+│   ├── casia_genlabels.py   # CASIA-specific label generation
 │   ├── fingerprint/
 │   │   ├── train.py           # Unified training script
 │   │   ├── test.py            # Unified testing script
-│   │   ├── inference/         # Embedding generation
-│   │   ├── core/              # Biometric crypto systems
-│   │   └── benchmarks/        # Cancelable biometric benchmarks
+│   │   ├── casia_train.py     # CASIA-specific training
+│   │   ├── casia_preprocess.py # CASIA preprocessing
+│   │   ├── preprocess_fingerprint.py # Fingerprint preprocessing
+│   │   ├── gen_embeddings.py # Embedding generation
+│   │   ├── inference_CASIA_new.py # CASIA inference (new)
+│   │   ├── inference_CASIA_old.py # CASIA inference (old)
+│   │   ├── idv_inference_FVC2004.py # FVC2004 inference
+│   │   ├── ComputeScores.py   # Score computation
+│   │   ├── metrics.py         # Evaluation metrics
+│   │   ├── Plot.py           # Plotting utilities
+│   │   └── accuracyCheck.py  # Accuracy checking
 │   └── utils/                 # Utility functions
-│       ├── Dataset_Loader.py
-│       ├── preprocess_fingerprint.py
-│       ├── gen_labels.py
-│       ├── model_downloader.py
-│       ├── hash_utils.py
-│       ├── xor_utils.py
-│       ├── quantization.py
-│       ├── ecc_utils.py
-│       └── logger.py
-├── tests/                     # Test suite
+│       ├── logger.py
+│       ├── sampler.py
+│       └── plot.py
 ├── docs/                      # Documentation
 ├── envs/                      # Conda environments
 │   ├── environment-cpu.yml
 │   └── environment-gpu.yml
-├── AGENTS.md                  # Agent guidelines
 └── README.md
 ```
 
@@ -129,31 +138,12 @@ python -m src.fingerprint.train --dataset fvc2000
 python -m src.fingerprint.train --dataset casia --resume artifacts/models/casia_arcface_model.pth
 ```
 
-### Testing
-```bash
-# Generate embeddings
-python -m src.fingerprint.test --dataset fvc2000 --mode generate
-
-# Evaluate performance
-python -m src.fingerprint.test --dataset fvc2000 --mode evaluate
-
-# Run all (generate + evaluate + visualize)
-python -m src.fingerprint.test --dataset fvc2000 --mode all
-```
 
 ### Download Pre-trained Models
 ```bash
-python -m src.utils.model_downloader
+python -m src.model_downloader
 ```
 
-### Running Tests
-```bash
-# All tests
-python -m pytest tests/
-
-# Single test
-python -m pytest tests/test_crypto_utils.py::test_sha256_determinism
-```
 
 ## Features
 

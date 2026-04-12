@@ -1,6 +1,6 @@
 """
 Unified Training Script for Fingerprint Recognition with Differentiable Quantization
-Supports: CASIA and FVC2000 datasets
+Supports: CASIA, FVC200, FVC2004 and CMBD datasets
 """
 
 import argparse
