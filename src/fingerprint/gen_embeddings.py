@@ -56,7 +56,7 @@ def main(dataset_name):
     model_path = os.path.join(SAVED_MODELS_DIR, config["model_name"])
 
     print(f"Loading {dataset_name} dataset for evaluation...")
-    val_dataset = FingerprintDataset(config["train_csv"], train=False, dataset_type=dataset_name)
+    val_dataset = FingerprintDataset(config["val_csv"], train=False, dataset_type=dataset_name)
     val_loader = DataLoader(val_dataset, batch_size=128, shuffle=False, num_workers=2)
 
     # Load Backbone
