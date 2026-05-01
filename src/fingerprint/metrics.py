@@ -120,13 +120,13 @@ if __name__ == "__main__":
     # Analyze the Raw (unprotected) system
     analyze_system(
         "Raw",
-        os.path.join(SCORE_DIR, "raw_genuine.npy"),
-        os.path.join(SCORE_DIR, "raw_impostor.npy")
+        os.path.join(SCORE_DIR, "casia_raw_gen.npy"),
+        os.path.join(SCORE_DIR, "casia_raw_imp.npy")
     )
     
     # Analyze the Protected system
     analyze_system(
         "Protected",
-        os.path.join(SCORE_DIR, "protected_genuine.npy"),
-        os.path.join(SCORE_DIR, "protected_impostor.npy")
+        os.path.join(SCORE_DIR, "casia_prot_gen.npy"),
+        os.path.join(SCORE_DIR, "casia_prot_imp.npy")
     )
