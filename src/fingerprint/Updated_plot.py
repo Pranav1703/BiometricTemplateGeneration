@@ -2,9 +2,17 @@ import numpy as np
 import os
 import argparse
 from torch.utils.tensorboard import SummaryWriter
-from src.config import ANALYSIS_LOG_DIR, SCORES_DIR
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from src.config import ANALYSIS_LOG_DIR, SCORES_DIR
 
+# ---------------------------
+# Custom Color Palette
+# ---------------------------
+COLOR_GENUINE = '#0072B2'    
+COLOR_IMPOSTOR = '#D55E00'   
+COLOR_BACKGROUND = "#FFFFFF" 
+COLOR_TEXT = '#333333'       
 # ---------------------------
 # EER and Curve Calculation Function
 # ---------------------------
@@ -52,80 +60,123 @@ def log_individual_metrics(writer, system_name, genuine, impostor, eer, threshol
 
 def save_overlapping_histogram(genuine, impostor, system_name, eer, threshold, dataset_name):
     """Generates and saves a presentation-ready overlapping distribution graph."""
-    plt.figure(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fig.patch.set_facecolor(COLOR_BACKGROUND)
+    ax.set_facecolor(COLOR_BACKGROUND)
     
-    # Plot Impostor (Red) and Genuine (Green) with 60% opacity (alpha=0.6)
-    plt.hist(impostor, bins=100, alpha=0.6, color='red', label='Impostor (Different Fingers)', density=True)
-    plt.hist(genuine, bins=100, alpha=0.6, color='green', label='Genuine (Same Finger)', density=True)
+    # Plot Impostor and Genuine with 60% opacity (alpha=0.6)
+    ax.hist(impostor, bins=100, alpha=0.6, color=COLOR_IMPOSTOR, label='Impostor (Different Fingers)', density=True)
+    ax.hist(genuine, bins=100, alpha=0.6, color=COLOR_GENUINE, label='Genuine (Same Finger)', density=True)
     
     # Add a vertical dashed line where your EER threshold is
-    plt.axvline(x=threshold, color='black', linestyle='--', linewidth=2, label=f'EER Threshold ({threshold:.2f})')
+    ax.axvline(x=threshold, color=COLOR_TEXT, linestyle='--', linewidth=2, label=f'EER Threshold ({threshold:.2f})')
     
-    plt.title(f'Score Distribution: {dataset_name.upper()} - {system_name}\nEER = {eer:.2%}', fontsize=14)
-    plt.xlabel('Similarity Score (0.0 to 1.0)', fontsize=12)
-    plt.ylabel('Density', fontsize=12)
-    plt.legend(loc='upper center')
-    plt.grid(True, alpha=0.3)
+    # Styling text and grid
+    ax.set_title(f'Score Distribution: {dataset_name.upper()} - {system_name}\nEER = {eer:.2%}', 
+                 fontsize=14, color=COLOR_TEXT, fontweight='bold')
+    ax.set_xlabel('Similarity Score (0.0 to 1.0)', fontsize=12, color=COLOR_TEXT)
+    ax.set_ylabel('Density', fontsize=12, color=COLOR_TEXT)
+    
+    legend = ax.legend(loc='upper center', facecolor=COLOR_BACKGROUND, edgecolor=COLOR_TEXT)
+    for text in legend.get_texts():
+        text.set_color(COLOR_TEXT)
+        
+    ax.grid(True, color=COLOR_TEXT, alpha=0.2)
+    ax.tick_params(colors=COLOR_TEXT)
+    for spine in ax.spines.values():
+        spine.set_color(COLOR_TEXT)
     
     # Save the plot
     os.makedirs("artifacts/plots", exist_ok=True)
     filename = f"artifacts/plots/{dataset_name}_{system_name}_Distribution.png"
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
     plt.close()
     print(f"Saved overlapping graph to {filename}")
 
 # ---------------------------
-# NEW: Combined 2x2 Grid Plotter
+# Centered 3-Plot Grid (Top: 2, Bottom: 1 Centered)
 # ---------------------------
 def save_combined_grid_plot(scenario_data, title, save_filename, expected_datasets):
     """
-    Generates a 2x2 grid plotting 4 datasets for a specific scenario.
+    Generates a custom grid plotting 3 datasets using the custom palette.
+    Top Row: casia, fvc2000
+    Bottom Row: fvc2004 (centered)
     """
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    axes = axes.flatten()
+    fig = plt.figure(figsize=(16, 12))
+    fig.patch.set_facecolor(COLOR_BACKGROUND)
+    
+    # Create a 2x4 grid to allow centering the bottom plot
+    gs = gridspec.GridSpec(2, 4, figure=fig)
+    
+    # Assign specific grid positions
+    ax1 = fig.add_subplot(gs[0, 0:2]) # Top Left (Spans cols 0 and 1)
+    ax2 = fig.add_subplot(gs[0, 2:4]) # Top Right (Spans cols 2 and 3)
+    ax3 = fig.add_subplot(gs[1, 1:3]) # Bottom Middle (Spans cols 1 and 2)
+    
+    axes = [ax1, ax2, ax3]
 
     for i, dataset_name in enumerate(expected_datasets):
+        if i >= 3: 
+            break # Safety break if array size changes
+            
         ax = axes[i]
+        ax.set_facecolor(COLOR_BACKGROUND)
         
         if dataset_name in scenario_data:
             genuine = scenario_data[dataset_name]['gen']
             impostor = scenario_data[dataset_name]['imp']
+            eer = scenario_data[dataset_name]['eer']
+            threshold = scenario_data[dataset_name]['thresh']
 
-            ax.hist(impostor, bins=100, alpha=0.6, color='red', label='Impostor', density=True)
-            ax.hist(genuine, bins=100, alpha=0.6, color='green', label='Genuine', density=True)
+            ax.hist(impostor, bins=100, alpha=0.6, color=COLOR_IMPOSTOR, label='Impostor', density=True)
+            ax.hist(genuine, bins=100, alpha=0.6, color=COLOR_GENUINE, label='Genuine', density=True)
             
-            ax.set_title(f"{dataset_name.upper()}", fontsize=14, fontweight='bold')
-            ax.set_xlabel('Similarity Score (0.0 to 1.0)', fontsize=12)
-            ax.set_ylabel('Density', fontsize=12)
-            ax.legend(loc='upper right')
-            ax.grid(True, alpha=0.3)
+            # Draw the threshold line
+            ax.axvline(x=threshold, color=COLOR_TEXT, linestyle='--', linewidth=2, label=f'Threshold ({threshold:.2f})')
+            
+            # Styling text, grid, and borders
+            ax.set_title(f"{dataset_name.upper()} - EER: {eer:.2%}", fontsize=14, fontweight='bold', color=COLOR_TEXT)
+            ax.set_xlabel('Similarity Score (0.0 to 1.0)', fontsize=12, color=COLOR_TEXT)
+            ax.set_ylabel('Density', fontsize=12, color=COLOR_TEXT)
+            
+            legend = ax.legend(loc='upper center', facecolor=COLOR_BACKGROUND, edgecolor=COLOR_TEXT)
+            for text in legend.get_texts():
+                text.set_color(COLOR_TEXT)
+                
+            ax.grid(True, color=COLOR_TEXT, alpha=0.2)
+            ax.tick_params(colors=COLOR_TEXT)
+            for spine in ax.spines.values():
+                spine.set_color(COLOR_TEXT)
         else:
-            ax.set_title(f"{dataset_name.upper()} - Missing Data", fontsize=14, fontweight='bold')
-            ax.text(0.5, 0.5, 'Data not found', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            ax.set_title(f"{dataset_name.upper()} - Missing Data", fontsize=14, fontweight='bold', color=COLOR_TEXT)
+            ax.text(0.5, 0.5, 'Data not found', horizontalalignment='center', verticalalignment='center', 
+                    transform=ax.transAxes, color=COLOR_TEXT)
 
-    plt.suptitle(title, fontsize=20, fontweight='bold')
+    plt.suptitle(title, fontsize=20, fontweight='bold', color=COLOR_TEXT)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     
     os.makedirs("artifacts/plots", exist_ok=True)
     filepath = os.path.join("artifacts/plots", save_filename)
-    plt.savefig(filepath, format='pdf', bbox_inches='tight', dpi=300)
+    # Ensure the background color persists in the saved PDF
+    plt.savefig(filepath, format='pdf', bbox_inches='tight', dpi=300, facecolor=fig.get_facecolor())
     plt.close()
-    print(f"Saved combined grid to {filepath}")
+    print(f"Saved custom styled 3-plot grid to {filepath}")
 
 # ---------------------------
 # Main Execution
 # ---------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Analyze Fingerprint Scores")
-    parser.add_argument("--dataset", type=str, choices=["casia", "fvc2000", "fvc2004", "cmbd"],
-                        help="The dataset to analyze (casia, fvc2000, fvc2004, cmbd)")
+    parser.add_argument("--dataset", type=str, choices=["casia", "fvc2000", "fvc2004"],
+                        help="The dataset to analyze (casia, fvc2000, fvc2004)")
     parser.add_argument("--combined", action="store_true", 
-                        help="Generate the 3 combined 2x2 PDF grids for the e-portfolio")
+                        help="Generate the 3 combined custom PDF grids for the e-portfolio")
     args = parser.parse_args()
 
     if args.combined:
-        print("--- Generating Combined 2x2 PDF Grids ---")
-        all_datasets = ["casia", "fvc2000", "fvc2004", "cmbd"]
+        print("--- Generating Centered 3-Plot PDF Grids with Custom Palette ---")
+        # Ensure array order exactly matches desired layout: casia, fvc2000, fvc2004
+        all_datasets = ["casia", "fvc2000", "fvc2004"] 
         raw_data, biohashed_data, stolen_data = {}, {}, {}
 
         for ds in all_datasets:
@@ -137,10 +188,16 @@ if __name__ == "__main__":
                 prot_imp = np.load(os.path.join(SCORES_DIR, f"{ds}_prot_imp.npy"))
                 stolen_imp = np.load(os.path.join(SCORES_DIR, f"{ds}_stolen_imp.npy"))
 
-                # Store in dictionaries
-                raw_data[ds] = {'gen': raw_gen, 'imp': raw_imp}
-                biohashed_data[ds] = {'gen': prot_gen, 'imp': prot_imp}
-                stolen_data[ds] = {'gen': prot_gen, 'imp': stolen_imp}
+                # Calculate metrics for the combined plots
+                raw_eer, raw_thresh, _, _, _ = calculate_curves_and_eer(raw_gen, raw_imp)
+                prot_eer, prot_thresh, _, _, _ = calculate_curves_and_eer(prot_gen, prot_imp)
+                stolen_eer, stolen_thresh, _, _, _ = calculate_curves_and_eer(prot_gen, stolen_imp)
+
+                # Store arrays and metrics in dictionaries
+                raw_data[ds] = {'gen': raw_gen, 'imp': raw_imp, 'eer': raw_eer, 'thresh': raw_thresh}
+                biohashed_data[ds] = {'gen': prot_gen, 'imp': prot_imp, 'eer': prot_eer, 'thresh': prot_thresh}
+                stolen_data[ds] = {'gen': prot_gen, 'imp': stolen_imp, 'eer': stolen_eer, 'thresh': stolen_thresh}
+                
             except FileNotFoundError:
                 print(f"Warning: Missing .npy files for {ds}. Generating grid with missing panels.")
 
@@ -167,7 +224,6 @@ if __name__ == "__main__":
             prot_gen = np.load(os.path.join(SCORES_DIR, f"{score_prefix}_prot_gen.npy"))
             prot_imp = np.load(os.path.join(SCORES_DIR, f"{score_prefix}_prot_imp.npy"))
             
-            # NEW: Load Stolen Impostor Scores
             stolen_imp = np.load(os.path.join(SCORES_DIR, f"{score_prefix}_stolen_imp.npy"))
         except FileNotFoundError as e:
             print(f"Error: Could not find scores for {args.dataset}. Run gen_embedding.py first.")
@@ -176,8 +232,6 @@ if __name__ == "__main__":
         # --- 2. Calculate curves ---
         raw_eer, raw_thresh, raw_far, raw_frr, thresholds = calculate_curves_and_eer(raw_gen, raw_imp)
         prot_eer, prot_thresh, prot_far, prot_frr, _ = calculate_curves_and_eer(prot_gen, prot_imp)
-        
-        # NEW: Calculate Stolen Token EER (Genuine User vs Hacker with Stolen Key)
         stolen_eer, stolen_thresh, stolen_far, stolen_frr, _ = calculate_curves_and_eer(prot_gen, stolen_imp)
 
         # --- 3. Log individual metrics ---
@@ -187,7 +241,6 @@ if __name__ == "__main__":
         log_individual_metrics(writer, "2_Bio_Hashed_Normal", prot_gen, prot_imp, prot_eer, prot_thresh)
         save_overlapping_histogram(prot_gen, prot_imp, "2_Bio_Hashed_Normal", prot_eer, prot_thresh, args.dataset)
         
-        # NEW: Log Stolen Scenario
         log_individual_metrics(writer, "3_Bio_Hashed_Stolen_Key", prot_gen, stolen_imp, stolen_eer, stolen_thresh)
         save_overlapping_histogram(prot_gen, stolen_imp, "3_Bio_Hashed_Stolen_Key", stolen_eer, stolen_thresh, args.dataset)
         
