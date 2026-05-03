@@ -1,227 +1,230 @@
 import os
 import sys
 import hashlib
+import random
 import numpy as np
 import cv2
 import torch
-from pathlib import Path
+from bch import BCH
 
-# Make sure the project root is in the Python path so you can import src
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Add project root to path (if needed)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Your existing modules
 from src.config import (
-    CASIA_DIR, CASIA_LABELS_DIR, CASIA_TRAIN_CSV, SAVED_MODELS_DIR, SCORES_DIR, PLOTS_DIR
+    CASIA_DIR,
+    SAVED_MODELS_DIR,
+    EMBEDDING_DIM
 )
 from src.fingerprint.preprocess_fingerprint import preprocess_fingerprint
-from src.fingerprint.train import FingerprintEmbeddingNet, EMBEDDING_DIM, DEVICE
-from src.fingerprint.gen_embeddings import generate_chaotic_projection, apply_bio_hash
-from src.Dataset_Loader import FingerprintDataset
+from src.fingerprint.train import FingerprintEmbeddingNet  # Your model class
 
-# BCH library (install with: pip install bchlib)
-import bchlib
-
-# ----------------------------------------------------------------------
-# 1. BCH configuration (511 bits, matches standard BCH(511, t=30))
-# ----------------------------------------------------------------------
-BCH_POLY = 529               # generator polynomial for BCH(511,30)
-BCH_T = 30                   # maximum correctable errors
-BCH_DATA_BYTES = 30          # bytes of data (2*30 = 240 bits of info)
-BCH_CODE_LENGTH = 511        # codeword length (2**9 - 1)
-
-bch = bchlib.BCH(BCH_POLY, BCH_DATA_BYTES)
-
-# ----------------------------------------------------------------------
-# 2. Helper: generate a random secret key, hash, and BCH encode
-# ----------------------------------------------------------------------
-def generate_secret_key(num_bytes=16):
-    """Random 128‑bit key."""
-    return os.urandom(num_bytes)
-
-def hash_secret(s: bytes) -> str:
-    return hashlib.sha256(s).hexdigest()
-
-def encode_secret(s: bytes) -> np.ndarray:
-    """BCH‑encode a secret key into a 511‑bit codeword."""
-    # Pad key to the BCH data length (30 bytes)
-    data_bytes = s.ljust(BCH_DATA_BYTES, b'\x00')
-    ecc = bch.encode(data_bytes)               # returns error correction bytes
-    codeword_bytes = data_bytes + ecc          # total length: 30 + ecc_bytes
-    # Convert to bit array of length 511
-    bits = np.unpackbits(np.frombuffer(codeword_bytes, dtype=np.uint8))[:BCH_CODE_LENGTH]
-    return bits.astype(np.uint8)
-
-def decode_secret(codeword_bits: np.ndarray):
-    """BCH‑decode a 511‑bit codeword, returning (secret_bytes, num_errors, success)."""
-    # Convert bits back to bytes
-    codeword_bytes = np.packbits(codeword_bits.astype(np.uint8)).tobytes()
-    try:
-        data_bytes, _, nerr = bch.decode(codeword_bytes)
-        # Trim to original 16 bytes (the rest is padding)
-        s = data_bytes[:16]
-        return s, nerr, True
-    except Exception:
-        # Decoding failure (too many errors)
-        return None, None, False
-
-# ----------------------------------------------------------------------
-# 3. Model loading (CASIA backbone only)
-# ----------------------------------------------------------------------
-def load_casia_model():
-    """Load the frozen CASIA ResNet‑50 backbone."""
+# ---------------------------------------------------------------------
+# 1. CONFIGURATION – tweak these values
+# ---------------------------------------------------------------------
+DATASET_TYPE = "casia"
+ENROLL_IMG = os.path.join(CASIA_DIR, "000", "L0", "000_L0_0.bmp")   # first image
+AUTH_IMG   = os.path.join(CASIA_DIR, "000", "L0", "000_L0_1.bmp")   # second image (same finger)
+USER_KEY   = "AliceSecureToken123"
+BCH_T      = 20                    # BCH error‑correcting capacity (max 56 for m=9)
+ERROR_TYPE = "cuts"                # "cuts", "dots", or "mixed"
+MAX_ERROR  = 30                    # maximum severity to test
+STEP_ERROR = 5                     # increment step
+DEVICE     = "cuda"
+# ---------------------------------------------------------------------
+# 2. LOAD THE FROZEN BACKBONE
+# ---------------------------------------------------------------------
+def load_model():
     model_path = os.path.join(SAVED_MODELS_DIR, "casia_arcface_model_quantized_100_128bs.pth")
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model not found at {model_path}. Train it first.")
-    backbone = FingerprintEmbeddingNet(EMBEDDING_DIM).to(DEVICE)
-    checkpoint = torch.load(model_path, map_location=DEVICE, weights_only=True)
-    backbone.load_state_dict(checkpoint["backbone"])
-    backbone.eval()
-    return backbone
+        raise FileNotFoundError(f"Model not found: {model_path}")
+    net = FingerprintEmbeddingNet(embedding_dim=EMBEDDING_DIM).to(DEVICE)
+    state = torch.load(model_path, map_location=DEVICE, weights_only=True)
+    net.load_state_dict(state["backbone"])
+    net.eval()
+    return net
 
-# ----------------------------------------------------------------------
-# 4. Obtain the protected template T_prot from an image path
-# ----------------------------------------------------------------------
-def get_protected_template(image_path: str, user_key: str, backbone: FingerprintEmbeddingNet):
-    """
-    Preprocess image, extract raw binary bits, then apply L2FE‑Hash (cancelable).
-    Returns a 511‑bit binary template (first 511 of the 512‑bit output).
-    """
-    # Preprocess (using dataset_type='casia' for correct CLAHE settings)
-    img_tensor = preprocess_fingerprint(
-        image_path, train=False, dataset_type="casia"
-    ).unsqueeze(0).to(DEVICE)
+# ---------------------------------------------------------------------
+# 3. L2FE‑HASH: chaotic orthogonal projection + median threshold
+# ---------------------------------------------------------------------
+def generate_chaotic_projection(user_key: str) -> torch.Tensor:
+    """Deterministic 512×512 orthogonal matrix from user key."""
+    seed_val = int(hashlib.sha256(user_key.encode()).hexdigest(), 16) % (2**32)
+    gen = torch.Generator(device=DEVICE)
+    gen.manual_seed(seed_val)
+    R = torch.randn((EMBEDDING_DIM, EMBEDDING_DIM), generator=gen, device=DEVICE)
+    Q, _ = torch.linalg.qr(R)
+    return Q
 
-    with torch.no_grad():
-        quantized_bits, _ = backbone(img_tensor)   # (1, 512)
-    raw_bits = quantized_bits.cpu().squeeze().numpy().astype(np.uint8)
+def extract_protected_template(raw_bio: torch.Tensor, R_key: torch.Tensor) -> torch.Tensor:
+    """Project raw binary template and binarise with median → protected template."""
+    projected = torch.matmul(R_key, raw_bio)
+    t = torch.median(projected)
+    return (projected >= t).float()
 
-    # Cancelable transform: chaotic projection + median threshold
-    R_key = generate_chaotic_projection(user_key)   # Orthogonal matrix on GPU
-    # Move raw bits to GPU for matrix multiplication
-    raw_tensor = quantized_bits.float()             # (1,512)
-    projected = torch.matmul(R_key, raw_tensor.T)   # (512,1)
-    prot_bits = apply_bio_hash(projected.T).squeeze().cpu().numpy().astype(np.uint8)
-
-    # Take first 511 bits (BCH works with 511)
-    return prot_bits[:BCH_CODE_LENGTH]
-
-# ----------------------------------------------------------------------
-# 5. Distortion functions: cuts (lines) and dirt (dots)
-# ----------------------------------------------------------------------
-def add_cuts(image: np.ndarray, num_lines: int, line_thickness: int = 2):
-    """
-    Draw random dark lines on a grayscale fingerprint to simulate cuts.
-    image: grayscale (H,W) uint8
-    """
-    out = image.copy()
-    h, w = image.shape
-    for _ in range(num_lines):
-        pt1 = (np.random.randint(0, w), np.random.randint(0, h))
-        pt2 = (np.random.randint(0, w), np.random.randint(0, h))
-        cv2.line(out, pt1, pt2, (0,), thickness=line_thickness)   # black line
+# ---------------------------------------------------------------------
+# 4. ADD SYNTHETIC ERRORS (cuts/dots) to the raw image
+# ---------------------------------------------------------------------
+def add_cuts(img: np.ndarray, num_cuts: int, thickness: int = 2) -> np.ndarray:
+    """Draw random black lines on a grayscale image."""
+    out = img.copy()
+    h, w = out.shape[:2]
+    for _ in range(num_cuts):
+        x1, y1 = np.random.randint(0, w), np.random.randint(0, h)
+        x2, y2 = np.random.randint(0, w), np.random.randint(0, h)
+        cv2.line(out, (x1, y1), (x2, y2), color=0, thickness=thickness)
     return out
 
-def add_dots(image: np.ndarray, num_dots: int, dot_radius: int = 2):
-    """
-    Draw random black dots (dirt) on a grayscale fingerprint.
-    """
-    out = image.copy()
-    h, w = image.shape
+def add_dots(img: np.ndarray, num_dots: int, radius: int = 3) -> np.ndarray:
+    """Draw random black dots."""
+    out = img.copy()
+    h, w = out.shape[:2]
     for _ in range(num_dots):
-        cx = np.random.randint(0, w)
-        cy = np.random.randint(0, h)
-        cv2.circle(out, (cx, cy), dot_radius, (0,), thickness=-1)  # filled circle
+        x, y = np.random.randint(0, w), np.random.randint(0, h)
+        cv2.circle(out, (x, y), radius, color=0, thickness=-1)
     return out
 
-# ----------------------------------------------------------------------
-# 6. Main demonstration
-# ----------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# 5. BCH FUZZY COMMITMENT (m=9, n=511)
+# ---------------------------------------------------------------------
+def setup_bch(t: int):
+    """
+    Create a BCH(m=9, t) object.
+    m = 9  → codeword length n = 2^9 - 1 = 511 bits.
+    Returns (bch_instance, data_bytes, code_bytes).
+    """
+    # For m=9, t ≤ 56.  Primitive polynomial is auto‑chosen.
+    bch = BCH(9, t)                 # all parameters in one call!
+
+    # Determine the size of the secret key (in bytes) that can be protected
+    k_bits = bch.n - 9 * t          # number of data bits
+    data_bytes = (k_bits + 7) // 8
+
+    # Codeword length in bytes (ceil(511/8) = 64)
+    code_bytes = (bch.n + 7) // 8
+    return bch, int(data_bytes), int(code_bytes)
+
+def bits2bytes(bits: np.ndarray) -> bytes:
+    """Convert a 1D binary numpy array (0/1) to bytes, MSB first, padded to byte boundary."""
+    padded = np.pad(bits, (0, (8 - len(bits) % 8) % 8), constant_values=0)
+    return bytes(int("".join(str(b) for b in padded[i:i+8]), 2)
+                 for i in range(0, len(padded), 8))
+
+def bytes2bits(data: bytes, nbits: int) -> np.ndarray:
+    """Convert bytes back to a binary array of exactly nbits."""
+    bits = np.unpackbits(np.frombuffer(data, dtype=np.uint8))
+    return bits[:nbits]
+
+# ---------------------------------------------------------------------
+# 6. ENROLLMENT
+# ---------------------------------------------------------------------
+def enroll(img_path: str, user_key: str, bch, data_bytes, model):
+    """
+    Enroll a user.
+    Returns: helper_data (H) as 511‑bit array, secret_key_bytes, R_key.
+    """
+    # Preprocess image
+    img_tensor = preprocess_fingerprint(img_path, train=False, dataset_type=DATASET_TYPE)
+    img_tensor = img_tensor.unsqueeze(0).to(DEVICE)
+
+    # Raw binary template R_bio (512 bits)
+    with torch.no_grad():
+        raw_bio, _ = model(img_tensor)  # quantized bits from STE
+    raw_bio = raw_bio.squeeze(0)  # [512]
+
+    # L2FE‑Hash → protected template T_prot (512 bits, then keep first 511)
+    R_key = generate_chaotic_projection(user_key)
+    T_prot = extract_protected_template(raw_bio, R_key).cpu().numpy().astype(int)
+    T_prot_511 = T_prot[:bch.n].astype(int)    # list or array of 0/1
+
+    # Generate random secret key S
+    secret = os.urandom(data_bytes)
+
+    # BCH encode: returns the full codeword as bytes (data + ecc)
+    codeword_bytes = bch.encode(secret)         # <-- NEW API
+    codeword_bits = bytes2bits(codeword_bytes, bch.n)
+
+    # Helper data H = C XOR T_prot
+    H = codeword_bits ^ T_prot_511
+
+    return H, secret, R_key
+
+# ---------------------------------------------------------------------
+# 7. AUTHENTICATION (with damaged query image)
+# ---------------------------------------------------------------------
+def authenticate(img_path: str, user_key: str, bch, data_bytes, H, secret, R_key, model):
+    """
+    Attempt authentication with a (possibly corrupted) fingerprint.
+    Returns True if secret key recovered, False otherwise.
+    """
+    # Preprocess query image
+    img_tensor = preprocess_fingerprint(img_path, train=False, dataset_type=DATASET_TYPE)
+    img_tensor = img_tensor.unsqueeze(0).to(DEVICE)
+
+    # Extract raw binary template
+    with torch.no_grad():
+        raw_bio, _ = model(img_tensor)
+    raw_bio = raw_bio.squeeze(0)
+
+    # Generate protected template T'_prot (using same R_key)
+    T_prot_prime = extract_protected_template(raw_bio, R_key).cpu().numpy().astype(int)
+    T_prot_prime_511 = T_prot_prime[:bch.n].astype(int)
+
+    # Recover corrupted codeword
+    C_prime_bits = H ^ T_prot_prime_511
+    C_prime_bytes = bits2bytes(C_prime_bits)   # still 64 bytes
+
+    # BCH decode – the library corrects errors and returns the original data (S)
+    try:
+        recovered_secret = bch.decode(C_prime_bytes)
+    except Exception:          # decode failure (too many errors)
+        return False
+
+    # Compare recovered secret with original
+    return recovered_secret == secret
+
+# ---------------------------------------------------------------------
+# 8. MAIN DEMO
+# ---------------------------------------------------------------------
 def main():
-    # ------------------------------------------------------------------
-    # 6.1 Choose a sample CASIA image (first available)
-    # ------------------------------------------------------------------
-    print("Looking for a CASIA image...")
-    # Let's pick one from the validation set (or training)
-    val_csv = CASIA_TRAIN_CSV   # or CASIA_VAL_CSV, both exist
-    if not os.path.exists(val_csv):
-        raise FileNotFoundError(f"Label file not found: {val_csv}. Run gen_labels.py first.")
-    dataset = FingerprintDataset(val_csv, train=False, dataset_type="casia")
-    if len(dataset) == 0:
-        raise RuntimeError("No samples in dataset.")
-    # Get the first sample’s path and label
-    first_sample = dataset.samples[0]
-    img_path = first_sample[0]               # full path
-    user_label = first_sample[1]             # integer ID
-    print(f"Using image: {img_path}\n")
+    print("Loading model...")
+    model = load_model()
+    print("Model loaded.\n")
 
-    # Load model
-    backbone = load_casia_model()
+    # Setup BCH
+    bch, data_bytes, code_bytes = setup_bch(BCH_T)
+    print(f"BCH parameters: m=9, n=511, t={BCH_T}, secret key size = {data_bytes*8} bits\n")
 
-    # ------------------------------------------------------------------
-    # 6.2 Enrolment
-    # ------------------------------------------------------------------
-    # Define a user‑specific key (e.g., derived from the person’s ID + a master password)
-    user_key = f"casia_user_{user_label}_secret_key"
-    print("1. Enrolment")
-    T_prot = get_protected_template(img_path, user_key, backbone)
-    print(f"   Protected template (first 50 bits): {T_prot[:50]}...")
+    # Enroll using the original (clean) image
+    print("=== ENROLLMENT ===")
+    H, secret, R_key = enroll(ENROLL_IMG, USER_KEY, bch, data_bytes, model)
+    print(f"Helper data H created. Secret key (hex) = {secret.hex()}\n")
 
-    # Generate secret key S and encode
-    S = generate_secret_key(16)
-    S_hash = hash_secret(S)
-    C = encode_secret(S)                     # 511‑bit codeword
-    H = C ^ T_prot                           # helper data
-    print(f"   Secret key hash: {S_hash[:16]}...")
-    print(f"   Helper data H stored.\n")
+    # Test with increasing corruption levels
+    print(f"=== AUTHENTICATION with {ERROR_TYPE} ===")
+    # Load the clean auth image as grayscale (to be modified each time)
+    base_auth_img = cv2.imread(AUTH_IMG, cv2.IMREAD_GRAYSCALE)
+    if base_auth_img is None:
+        raise FileNotFoundError(f"Cannot read {AUTH_IMG}")
 
-    # ------------------------------------------------------------------
-    # 6.3 Authentication with increasing image distortions
-    # ------------------------------------------------------------------
-    # We'll save distorted images into a subdirectory
-    output_dir = os.path.join(PLOTS_DIR, "casia_distortion_demo")
-    os.makedirs(output_dir, exist_ok=True)
+    for severity in range(0, MAX_ERROR+1, STEP_ERROR):
+        corrupted = base_auth_img.copy()
+        if ERROR_TYPE == "cuts":
+            corrupted = add_cuts(corrupted, num_cuts=severity)
+        elif ERROR_TYPE == "dots":
+            corrupted = add_dots(corrupted, num_dots=severity)
+        else:  # mixed
+            corrupted = add_cuts(corrupted, num_cuts=severity//2)
+            corrupted = add_dots(corrupted, num_dots=severity//2)
 
-    # Test various levels: number of cuts (or dots). We'll use cuts for clarity.
-    # You can change the function to add_dots if you prefer.
-    test_levels = [0, 5, 10, 15, 20, 25, 30, 35, 40]   # number of cuts
-    print(f"2. Authentication tests (BCH capacity t = {BCH_T})")
-    print("-" * 60)
+        # Save temporary corrupted image
+        tmp_path = f"temp_corrupted_{severity}.bmp"
+        cv2.imwrite(tmp_path, corrupted)
 
-    # Load original grayscale image (not preprocessed) to apply distortions
-    orig_img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-    if orig_img is None:
-        raise RuntimeError(f"Could not read image {img_path}")
-
-    for num_cuts in test_levels:
-        # Apply distortion
-        dist_img = add_cuts(orig_img, num_cuts, line_thickness=2)
-        # Save temporary file for preprocessing
-        temp_path = os.path.join(output_dir, f"distorted_{num_cuts:02d}_cuts.tif")
-        cv2.imwrite(temp_path, dist_img)
-
-        # Get protected template from the distorted image
-        T_prot_prime = get_protected_template(temp_path, user_key, backbone)
-
-        # Fuzzy commitment recovery
-        C_prime = H ^ T_prot_prime
-        S_prime, nerr, success = decode_secret(C_prime)
-
-        # Check hash
-        if success:
-            valid = (hash_secret(S_prime) == S_hash)
-        else:
-            valid = False
-
-        print(f"  Cuts added: {num_cuts:2d}  ->  Authentication {'✔ SUCCESS' if valid else '✘ FAILED'} ", end="")
-        if success and nerr is not None:
-            print(f"(corrected errors: {nerr})")
-        else:
-            print()
-
-        # We do not clean up the temp file so you can inspect it later.
-
-    print("\nDistorted images saved in:", output_dir)
-    print("Done. Increase 'num_cuts' beyond ~30 to see failure due to exceeding BCH error correction.")
+        success = authenticate(
+            tmp_path, USER_KEY, bch, data_bytes, H, secret, R_key, model
+        )
+        print(f"Severity {severity:3d}  →  Authentication {'SUCCESS' if success else 'FAILED'}")
+        os.remove(tmp_path)
 
 if __name__ == "__main__":
     main()
