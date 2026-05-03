@@ -10,3 +10,5 @@ __pycache__/
 /wandb
 *.egg-info/
 .vscode
+/.vs
+/outputs
