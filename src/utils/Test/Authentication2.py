@@ -21,7 +21,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.config import (
     CASIA_DIR,
     SAVED_MODELS_DIR,
-    EMBEDDING_DIM
+    EMBEDDING_DIM,
+    METRICS_DIR
 )
 from src.fingerprint.preprocess_fingerprint import preprocess_fingerprint
 from src.fingerprint.train import FingerprintEmbeddingNet
@@ -235,7 +236,7 @@ def main():
         raise FileNotFoundError(f"Cannot read {AUTH_IMG}")
 
     # Create an output folder for saving damaged images
-    os.makedirs("outputs", exist_ok=True)
+    os.makedirs(METRICS_DIR, exist_ok=True)
 
     for severity in range(0, MAX_ERROR + 1, STEP_ERROR):
         corrupted = base_auth_img.copy()
@@ -248,7 +249,7 @@ def main():
             corrupted = add_dots(corrupted, num_dots=(severity//2)*10)
 
         # Save corrupted image for review
-        save_path = os.path.join("outputs", f"auth_damaged_{ERROR_TYPE}_{severity:03d}.bmp")
+        save_path = os.path.join(METRICS_DIR, f"auth_damaged_{ERROR_TYPE}_{severity:03d}.bmp")
         cv2.imwrite(save_path, corrupted)
 
         success, errors = authenticate(
