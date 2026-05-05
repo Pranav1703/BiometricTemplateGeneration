@@ -78,6 +78,10 @@ FINGERPRINT_EX_FVC2000 = os.path.join(FVC2000_DB1A_DIR, "1_1.tif")
 # Google Drive model download settings
 GOOGLE_DRIVE_MODELS_URL = "https://drive.google.com/drive/folders/1hh4CHY4jFk8gJhsPziOKqKNlbuW4nD08?usp=sharing"
 
+# Test folder and libcustombch.dll
+TEST_DIR = os.path.join(UTILS_DIR, "Test")
+CUS_BCH_DLL = os.path.join(TEST_DIR, "libcustombch.dll")
+
 # FVC2000 4-Finger Configuration (2 fingers per person for testing)
 # Format: {person_id}_{finger_id}.tif where finger_id 1-8
 # Using fingers 1,2 for enrollment (gallery) and 3,4 for verification (probe)

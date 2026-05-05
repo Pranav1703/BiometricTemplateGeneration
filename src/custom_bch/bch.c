@@ -128,7 +128,7 @@
 #define GF_T(_p)               ((_p)->t)
 #define GF_N(_p)               ((_p)->n)
 #define BCH_MAX_M              31 /* 2KB */
-#define BCH_MAX_T              64 /* 64 bit correction */
+#define BCH_MAX_T              256 /* 64 bit correction */
 #endif
 
 #define BCH_ECC_WORDS(_p)      DIV_ROUND_UP(GF_M(_p)*GF_T(_p), 32)
